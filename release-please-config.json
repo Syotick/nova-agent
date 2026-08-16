@@ -1,0 +1,16 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "nova-agent",
+      "changelog-sections": [
+        { "type": "feat", "section": "✨ 新功能" },
+        { "type": "fix", "section": "🐛 修复" },
+        { "type": "docs", "section": "📄 文档" },
+        { "type": "refactor", "section": "♻️ 重构" },
+        { "type": "chore", "section": "🔧 其他" },
+        { "type": "test", "section": "🧪 测试" }
+      ]
+    }
+  }
+}
