@@ -5,6 +5,7 @@ import type { ChatEvent, Agent, Message, Session, ToolCallRecord } from './types
 import { listToolsFor, callMcpTool } from './mcp.js'
 import { injectSkills } from './skills.js'
 import { resolveApiKey } from './store.js'
+import { shouldCompact, compactSession } from './compact.js'
 
 const MAX_STEPS = 8
 
@@ -22,11 +23,26 @@ export async function runTurn(
   userText: string,
   push: (e: ChatEvent) => void,
 ): Promise<Message> {
-  // 检查点 1：用户消息落盘
+  const emit = push
+
+  // 自动压缩：turn 开始前检查消息数，超过阈值先总结旧消息再继续
+  // （压缩本身也消耗一轮 LLM 调用，仅当历史超长时触发；先压缩再追加本轮用户消息）
+  if (shouldCompact(session)) {
+    try {
+      const result = await compactSession(session, agent)
+      if (result) {
+        emit({ type: 'compact', summary: result.summary, removed: result.removed, kept: result.kept })
+        console.log(`[compact] session ${session.id}: removed ${result.removed}, kept ${result.kept}`)
+      }
+    } catch (err) {
+      // 压缩失败不阻塞对话（保留原历史继续）
+      console.warn(`[compact] failed: ${(err as Error).message}`)
+    }
+  }
+
+  // 检查点 1：用户消息落盘（压缩之后，保证新消息不被压缩）
   const userMsg: Message = { id: uid(), role: 'user', content: userText, createdAt: Date.now() }
   session.messages.push(userMsg)
-
-  const emit = push
 
   // 组装 MCP 工具
   const mcpTools = await listToolsFor(agent.mcpServerIds)
@@ -64,8 +80,11 @@ export async function runTurn(
     })
   }
 
-  // system prompt = persona + 技能注入
-  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}`
+  // system prompt = persona + 技能注入 + 历史摘要（压缩后存在）
+  const summaryBlock = session.summary
+    ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
+    : ''
+  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}`
 
   // 历史消息（AI SDK 格式）
   const history = session.messages.slice(0, -1).map((m) => ({

@@ -54,6 +54,8 @@ export interface Session {
   messages: Message[]
   createdAt: number
   updatedAt: number
+  /** 最近一次压缩生成的上下文摘要（自动压缩后写入） */
+  summary?: string
 }
 
 // SSE 事件类型
@@ -64,4 +66,5 @@ export type ChatEvent =
   | { type: 'step'; step: number }
   | { type: 'usage'; input: number; output: number }
   | { type: 'done'; message: Message }
+  | { type: 'compact'; summary: string; removed: number; kept: number }
   | { type: 'error'; message: string }

@@ -40,7 +40,9 @@ export const api = {
   getSession: (id: string) => json<Session>(`/sessions/${id}`),
   renameSession: (id: string, title: string) => json<Session>(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify({ title }) }),
   deleteSession: (id: string) => json<{ ok: boolean }>(`/sessions/${id}`, { method: 'DELETE' }),
-  compactSession: (id: string) => json<{ ok: boolean; skipped?: boolean; message?: string }>(`/sessions/${id}/compact`, { method: 'POST' }),
+  compactSession: (id: string) =>
+    json<{ ok: boolean; skipped?: boolean; message?: string; summary?: string; removed?: number; kept?: number }>(
+      `/sessions/${id}/compact`, { method: 'POST' }),
 
   stopChat: (sessionId: string) => json<{ ok: boolean }>('/chat/stop', { method: 'POST', body: JSON.stringify({ sessionId }) }),
 

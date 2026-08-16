@@ -3,6 +3,25 @@
     <!-- 消息区（flex:1）：有会话显示消息，无会话显示引导占位 -->
     <div class="chat-area">
       <template v-if="store.currentSession">
+        <!-- 压缩横幅：有摘要显示历史摘要；消息多时提示可手动压缩 -->
+        <div v-if="store.currentSession.summary || canCompact" class="compact-banner">
+          <svg class="compact-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2v12M2 8h12" />
+            <path d="M5 5l3 3 3-3M5 11l3-3 3 3" opacity="0" />
+          </svg>
+          <template v-if="store.currentSession.summary">
+            <span class="compact-label">已压缩</span>
+            <span class="compact-summary" :title="store.currentSession.summary">
+              {{ store.currentSession.summary }}
+            </span>
+          </template>
+          <template v-else>
+            <span class="compact-label">会话较长（{{ store.currentSession.messages.length }} 条消息）</span>
+            <button class="compact-btn" :disabled="store.compacting" @click="doCompact()">
+              {{ store.compacting ? '压缩中…' : '压缩上下文' }}
+            </button>
+          </template>
+        </div>
         <MessageList />
         <div v-if="store.error" class="error-bar">
           <span class="error-dot"></span>
@@ -49,6 +68,19 @@ export default Vue.extend({
   computed: {
     store() {
       return useMainStore()
+    },
+    // 超过 40 条消息可手动压缩（与后端阈值一致）
+    canCompact(): boolean {
+      const s = this.store.currentSession
+      return !!s && s.messages.length > 40 && !s.summary
+    },
+  },
+  methods: {
+    async doCompact() {
+      const res = await this.store.compactSession()
+      if (res && res.skipped) {
+        // 长度不足时忽略
+      }
     },
   },
 })
@@ -118,4 +150,44 @@ export default Vue.extend({
   animation: fadeIn 0.25s;
 }
 .error-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px rgba(248, 113, 113, 0.7); }
+
+/* 压缩横幅 */
+.compact-banner {
+  flex: none;
+  margin: 10px 24px 0;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(109, 139, 255, 0.08);
+  border: 1px solid rgba(109, 139, 255, 0.22);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-dim);
+  animation: fadeIn 0.25s;
+}
+.compact-icon { flex: none; color: var(--brand); }
+.compact-label { flex: none; font-weight: 600; color: var(--brand); white-space: nowrap; }
+.compact-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+.compact-btn {
+  flex: none;
+  border: 1px solid rgba(109, 139, 255, 0.4);
+  background: var(--grad-brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+.compact-btn:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+.compact-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
