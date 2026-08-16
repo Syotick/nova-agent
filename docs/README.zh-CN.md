@@ -233,15 +233,7 @@ when_to_use: 使用时机
 
 ---
 
-## 🗺️ 路线图
-
-- **虚拟滚动**：支持超长会话（>500 条消息）
-- **多 Agent 编排**：`POST /api/subagent` 路由（子 Agent 结果汇总）
-- **模型注册表**：多 provider 路由
-
----
-
-## 🛠️ 技术选型（详见 [TECH-DECISION.md](./TECH-DECISION.md)）
+## 🛠️ 技术选型
 
 | 层 | 选型 | 理由 |
 |---|---|---|
@@ -251,17 +243,6 @@ when_to_use: 使用时机
 | 工具 | **MCP 协议** | 业界标准（"AI 的 USB-C"） |
 | 技能 | **Agent Skills**（SKILL.md） | Claude Code / Cursor 事实标准 |
 | 动画 | Vue 内置 transition | 零依赖 |
-
-**为什么不用 LangChain/LangGraph/CrewAI**：见 [TECH-DECISION.md](./TECH-DECISION.md) —— 本机实测 LangChain 48.9MB / 5577 文件，本项目 Agent 逻辑层仅 11.5MB，标准协议 > 框架抽象。
-
----
-
-## 📚 公开文档
-
-- [技术选型报告](./TECH-DECISION.md)
-- [CI/CD 与项目管理实践调研](./CICD-RESEARCH.md)
-
-> 开发者内部文档（教程/架构/维护手册）在本机 `devdocs/` 目录，不随仓库发布。
 
 ---
 
