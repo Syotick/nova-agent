@@ -24,3 +24,10 @@ export function autoTitle(text: string): string {
   const t = text.trim().replace(/\s+/g, ' ')
   return t.length > 24 ? `${t.slice(0, 24)}…` : t || '新会话'
 }
+
+// token 数格式化：<1000 原样，否则 k 缩写（1234 → 1.2k）
+export function fmtTokens(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '0'
+  if (n < 1000) return String(n)
+  return `${(n / 1000).toFixed(1)}k`
+}

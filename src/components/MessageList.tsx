@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMainStore } from '../store'
 import ToolCallCard from './ToolCallCard'
 import { renderMarkdown, renderStreaming } from '../markdown'
-import { cn, fmtSize } from '../lib/utils'
+import { cn, fmtSize, fmtTokens } from '../lib/utils'
 import type { Message, MessageSegment } from '../types'
 
 function isImage(att: { mime: string }) { return att.mime.startsWith('image/') }
@@ -110,6 +110,14 @@ export default function MessageList() {
             {msg.toolCalls?.map((tc) => <ToolCallCard key={tc.id} call={tc} />)}
           </>
         )}
+      {/* token 用量（assistant 消息） */}
+      {msg.role === 'assistant' && msg.tokens && (msg.tokens.input > 0 || msg.tokens.output > 0) && (
+        <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground/80" title={`输入 ${msg.tokens.input.toLocaleString()} tokens · 输出 ${msg.tokens.output.toLocaleString()} tokens`}>
+          <span className="rounded bg-muted px-1.5 py-px">↑{fmtTokens(msg.tokens.input)}</span>
+          <span className="rounded bg-muted px-1.5 py-px">↓{fmtTokens(msg.tokens.output)}</span>
+          <span className="rounded bg-primary/10 px-1.5 py-px text-primary">Σ{fmtTokens(msg.tokens.input + msg.tokens.output)}</span>
+        </div>
+      )}
     </div>
   )
 
