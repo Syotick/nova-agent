@@ -1,0 +1,7 @@
+{
+  "id": "filesystem",
+  "name": "文件系统",
+  "command": "node",
+  "args": ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", "D:\\Data\\deepseekharness_project\\workspace"],
+  "timeoutMs": 30000
+}
