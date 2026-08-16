@@ -19,6 +19,6 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v5
         with:
-          release-type: node
-          package-name: nova-agent
           token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
