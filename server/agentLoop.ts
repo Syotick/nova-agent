@@ -9,6 +9,7 @@ import { shouldCompact, compactSession } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools } from './builtinTools.js'
 import { newId } from './store.js'
+import { searchMemories, addMemory, listMemories, touchMemories } from './memory.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
 // （可环境变量覆盖：NOVA_AGENT_MAX_STEPS）
@@ -241,17 +242,92 @@ export async function runTurn(
     },
   })
 
+  // 内置工具：remember（跨会话记忆，所有 Agent 自动拥有）
+  // 模型在对话中判断"用户明确表达的偏好/重要事实"时调用；注入到所有后续会话的 system prompt
+  tools['remember'] = tool({
+    description:
+      '把用户明确表达的、值得长期记住的信息（个人偏好、项目事实、长期约定等）存入跨会话记忆。' +
+      '之后所有会话都会自动参考这些记忆。仅在用户明确表达、且对未来对话有长期价值时使用，不要滥用（不要记住临时性内容）。',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: '要记住的内容（一句话，简洁完整，如"用户喜欢简洁的回答"）' },
+      },
+      required: ['content'],
+    }),
+    execute: async (args) => {
+      const content = String((args as { content?: unknown }).content ?? '').trim()
+      const record: ToolCallRecord = {
+        id: uid(),
+        name: 'remember',
+        input: args,
+        output: '',
+        status: 'running',
+        startedAt: Date.now(),
+        durationMs: 0,
+      }
+      segments.push({ kind: 'tool', call: record })
+      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
+      try {
+        if (!content) {
+          record.output = 'ERROR: content required'
+          record.status = 'error'
+          record.durationMs = Date.now() - record.startedAt
+          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          return { content: 'Error: content 参数必填', isError: true }
+        }
+        const result = addMemory(agent.id, content, 'auto')
+        const verb = result.merged ? '已更新' : '已记住'
+        record.output = `${verb}：${result.memory.content}`
+        record.status = 'success'
+        record.durationMs = Date.now() - record.startedAt
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return { content: `${verb}（将影响后续所有会话）：${result.memory.content}${result.merged ? '（内容与原记忆相似，已合并更新）' : ''}` }
+      } catch (err) {
+        record.output = `ERROR: ${(err as Error).message}`
+        record.status = 'error'
+        record.durationMs = Date.now() - record.startedAt
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return { content: `Error: 记忆保存失败（${(err as Error).message}）`, isError: true }
+      }
+    },
+  })
+
   // system prompt = persona + 技能注入 + 历史摘要（压缩后存在）+ 执行约束 + 工具选择策略
   const summaryBlock = session.summary
     ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
     : ''
+
+  // 跨会话记忆：词面检索 Top-K + 最近记忆补齐（"我有什么偏好"这类无共同词的提问
+  // 靠 recency 兜底，但命中 ≥3 时不补齐以降低噪声）；注入后 touch（LRU 保活）
+  const memoryBlock = (() => {
+    try {
+      const hits = searchMemories(agent.id, modelUserText, 5)
+      // 词面命中 ≥ 3 时不再 recency 补齐（避免无关记忆进 prompt）
+      const recents = hits.length < 3
+        ? listMemories(agent.id).slice(0, Math.max(0, 5 - hits.length))
+        : []
+      const all = [...hits, ...recents.filter((r) => !hits.some((h) => h.id === r.id))]
+      if (!all.length) return ''
+      // 注入过的记忆保活（LRU 淘汰时保护高频记忆）
+      touchMemories(all.map((m) => m.id))
+      return `\n\n---\n\n# 长期记忆（跨会话）\n以下是与本次问题相关的、之前会话中确认过的信息，回答时优先参考（与当前事实冲突时以最新对话为准）：\n${all.map((m) => `- ${m.content}`).join('\n')}`
+    } catch {
+      return ''
+    }
+  })()
   const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。\n\n# 工具选择策略（重要）\n- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。\n- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。\n- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。
 
 # 子 Agent 编排（subagent）
 - 复杂任务可派生子 Agent 并行执行（同一轮多个 subagent 调用会并行跑）：每个 task 必须自包含（目标+约束+交付格式）；可并行拆分的方向不要串行做。
 - 子任务失败（返回 ERROR）时：有明确原因 → 修正 task 后重试最多 1 次；有部分产出 → 基于部分产出继续；不可恢复 → 立即停止并告知用户。禁止编造子任务结果或虚构其细节。
-- 子任务结论直接引用其返回文本，不要添加未在返回中出现的具体信息。`
-  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${stepBudget}`
+- 子任务结论直接引用其返回文本，不要添加未在返回中出现的具体信息。
+
+# 跨会话记忆（remember）
+- 用户明确表达个人偏好、项目事实或长期约定时，调用 remember 工具记住（一句话，简洁完整）。
+- 不要记住临时性内容（本次任务细节、一次性指令）；每轮最多调用 1-2 次。
+- 回答时优先参考 system prompt 中注入的长期记忆；与当前对话冲突时以当前对话为准。`
+  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${stepBudget}`
 
   // 历史消息（AI SDK 格式）
   const history = session.messages.slice(0, -1).map((m) => ({

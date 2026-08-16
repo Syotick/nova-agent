@@ -5,7 +5,7 @@ import MainPane from './components/MainPane'
 import AgentConfigModal from './components/AgentConfigModal'
 import type { Agent } from './types'
 
-export type View = 'chat' | 'trajectory' | 'skills' | 'tasks' | 'tools' | 'models'
+export type View = 'chat' | 'trajectory' | 'skills' | 'tasks' | 'tools' | 'models' | 'memories' | 'mcps'
 
 export default function App() {
   const init = useMainStore((s) => s.init)

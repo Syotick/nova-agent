@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings,
+  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings, Brain, Cable,
 } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
@@ -125,6 +125,8 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
     { id: 'trajectory', label: '轨迹', icon: <ChevronRight className="h-3.5 w-3.5" /> },
     { id: 'models', label: '模型渠道', icon: <Cpu className="h-3.5 w-3.5" /> },
     { id: 'skills', label: '技能管理', icon: <Sparkles className="h-3.5 w-3.5" /> },
+    { id: 'memories', label: '记忆', icon: <Brain className="h-3.5 w-3.5" /> },
+    { id: 'mcps', label: 'MCP 服务器', icon: <Cable className="h-3.5 w-3.5" /> },
     { id: 'tasks', label: '定时任务', icon: <Clock className="h-3.5 w-3.5" />, badge: taskBadge },
     { id: 'tools', label: '工具浏览', icon: <Wrench className="h-3.5 w-3.5" /> },
   ]

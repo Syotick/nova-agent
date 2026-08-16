@@ -61,9 +61,30 @@ db.exec(`
     run_count    INTEGER NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS memories (
+    id          TEXT PRIMARY KEY,
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'manual',
+    created_at  INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_memories_agent ON memories(agent_id, created_at DESC);
 `)
 
-// 兼容：旧库可能缺 session_id 列（ALTER 幂等性靠 try/catch）
+// 兼容：旧库可能缺 session_id 列 / memories 缺 last_used_at 列（ALTER 幂等性靠 try/catch）
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN session_id TEXT`)
+} catch {
+  // 列已存在
+}
+
+try {
+  db.exec(`ALTER TABLE memories ADD COLUMN last_used_at INTEGER NOT NULL DEFAULT 0`)
+} catch {
+  // 列已存在
+}
 try {
   db.exec(`ALTER TABLE tasks ADD COLUMN session_id TEXT`)
 } catch {
