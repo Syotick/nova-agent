@@ -235,14 +235,6 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 ---
 
-## 🗺️ Roadmap
-
-- **Virtual scrolling** for very long sessions (>500 messages)
-- **Multi-agent orchestration**: `POST /api/subagent` route (subagents with result aggregation)
-- **Model registry** for multi-provider routing
-
----
-
 ## 🛠️ Tech Stack
 
 | Layer | Choice | Why |
@@ -254,11 +246,7 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | Skills | **Agent Skills** (SKILL.md) | De-facto standard (Claude Code / Cursor) |
 | Animations | Vue built-in transitions | Zero dependencies |
 
-**Why not LangChain/LangGraph/CrewAI?** See [docs/TECH-DECISION.md](./docs/TECH-DECISION.md) — measured on this machine: LangChain 48.9MB / 5,577 files vs. our agent logic layer at 11.5MB; standard protocols beat framework abstractions.
-
-**Engineering practices** (CI/CD, PR flow, project management research): see [docs/CICD-RESEARCH.md](./docs/CICD-RESEARCH.md) — trunk-based development, CI quality gates, conventional commits, Kanban/Milestone workflow.
-
-**Documentation**: [docs/README.md](./docs/README.md) (docs index) · [中文文档](./docs/README.zh-CN.md)
+**Documentation**: [中文文档](./docs/README.zh-CN.md)
 
 ---
 
