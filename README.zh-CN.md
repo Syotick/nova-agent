@@ -34,13 +34,19 @@
 ### 会话管理
 - ✅ 会话切换 / 新建 / 重命名（行内编辑）/ 删除
 - ✅ 首条消息自动创建会话
-- ✅ JSON 检查点持久化（崩溃不丢）
+- ✅ **SQLite** 持久化（自动迁移旧 JSON 数据）
+
+### 定时任务
+- ✅ 5 段 cron 定时任务：让 Agent 定时干活（如每 5 分钟盯盘、每日日报）
+- ✅ 任务在专用会话中运行（上下文连续），执行结果落库
+- ✅ 支持手动立即执行、暂停/启用/删除
 
 ### 安全
 - ✅ **工作区隔离**：Agent 只能访问 `workspace/`，读不到项目代码与 API key
 - ✅ **Key 外置**：密钥存项目外 `.nova-agent-key.json`
 - ✅ 删除操作需自定义确认弹窗
 - ✅ Markdown 渲染禁用原始 HTML（防 XSS）
+- ✅ **MCP 健康检查**：自动 ping + 指数退避重连
 
 ### 体验
 - ✅ 深色玻璃拟态 + 紫蓝渐变（LobeChat 风格）
@@ -83,7 +89,7 @@
 ## 🚀 快速启动
 
 ### 前置要求
-- Node.js 18+
+- Node.js 22+（使用内置 `node:sqlite`，无需原生模块）
 - DeepSeek API Key（或任意 OpenAI 兼容服务）
 
 ### 启动
@@ -219,6 +225,8 @@ when_to_use: 使用时机
 | PUT/DELETE | `/api/sessions/:id` | 重命名 / 删除会话 |
 | GET | `/api/sessions/:id` | 取会话（含消息） |
 | POST | `/api/sessions/:id/compact` | 手动压缩上下文（LLM 总结） |
+| GET/POST/PUT/DELETE | `/api/tasks` | 定时任务 CRUD |
+| POST | `/api/tasks/:id/run` | 手动立即执行任务 |
 | **POST** | **`/api/chat`** | **SSE 流式对话（核心）** |
 | POST | `/api/chat/stop` | 中断当前对话 |
 | GET/POST | `/api/config` | API key 状态 / 保存 |
@@ -229,7 +237,7 @@ when_to_use: 使用时机
 
 - **虚拟滚动**：支持超长会话（>500 条消息）
 - **多 Agent 编排**：`POST /api/subagent` 路由（子 Agent 结果汇总）
-- **SQLite 持久化**：更大规模部署
+- **模型注册表**：多 provider 路由
 
 ---
 

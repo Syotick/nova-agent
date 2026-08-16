@@ -14,10 +14,10 @@
 
     <header class="header" v-else>
       <div class="header-left">
-        <span class="manager-tag">{{ view === 'skills' ? '📚' : '🧰' }}</span>
+        <span class="manager-tag">{{ view === 'skills' ? '📚' : view === 'tasks' ? '⏱️' : '🧰' }}</span>
         <div class="header-info">
-          <span class="agent-name">{{ view === 'skills' ? '技能管理' : '工具浏览' }}</span>
-          <span class="agent-model">{{ view === 'skills' ? 'Skills' : 'Tools' }}</span>
+          <span class="agent-name">{{ view === 'skills' ? '技能管理' : view === 'tasks' ? '定时任务' : '工具浏览' }}</span>
+          <span class="agent-model">{{ view === 'skills' ? 'Skills' : view === 'tasks' ? 'Tasks' : 'Tools' }}</span>
         </div>
       </div>
     </header>
@@ -27,6 +27,7 @@
         <ChatView v-if="view === 'chat'" key="chat" />
         <TrajectoryView v-else-if="view === 'trajectory'" key="traj" />
         <SkillManager v-else-if="view === 'skills'" key="skills" />
+        <TaskManager v-else-if="view === 'tasks'" key="tasks" />
         <ToolManager v-else key="tools" />
       </transition>
     </main>
@@ -39,11 +40,12 @@ import { useMainStore } from '../store'
 import ChatView from './ChatView.vue'
 import TrajectoryView from './TrajectoryView.vue'
 import SkillManager from './SkillManager.vue'
+import TaskManager from './TaskManager.vue'
 import ToolManager from './ToolManager.vue'
 
 export default Vue.extend({
   name: 'MainPane',
-  components: { ChatView, TrajectoryView, SkillManager, ToolManager },
+  components: { ChatView, TrajectoryView, SkillManager, TaskManager, ToolManager },
   props: {
     view: { type: String, default: 'chat' },
   },

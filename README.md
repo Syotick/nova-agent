@@ -34,13 +34,19 @@
 ### Session Management
 - ✅ Create / switch / rename (inline edit) / delete sessions
 - ✅ First message auto-creates a session
-- ✅ Session persistence via JSON checkpoints (crash-safe)
+- ✅ Session persistence via **SQLite** (auto-migrates legacy JSON data)
+
+### Scheduled Tasks
+- ✅ Cron-based scheduled tasks: let an agent run on a timer (e.g. market watch every 5 minutes, daily report)
+- ✅ Tasks run in dedicated persistent sessions (continuous context), results recorded
+- ✅ Run-on-demand, enable/pause/delete from the UI
 
 ### Security
 - ✅ **Workspace isolation**: agents can only access `workspace/` — project code and API keys are unreachable
 - ✅ **External key storage**: API key lives outside the project (`.nova-agent-key.json`)
 - ✅ Custom confirmation dialogs (delete protection)
 - ✅ Raw HTML disabled in Markdown rendering (XSS-safe)
+- ✅ **MCP health checks**: automatic ping + exponential-backoff reconnect
 
 ### Experience
 - ✅ Dark glassmorphism + purple-blue gradient (LobeChat style)
@@ -83,7 +89,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 22+ (uses built-in `node:sqlite`; no native modules needed)
 - A DeepSeek API key (or any OpenAI-compatible endpoint)
 
 ### Run
@@ -146,7 +152,6 @@ nova-agent/
 | `NOVA_AGENT_PORT` | `8787` | Backend port |
 | `NOVA_AGENT_COMPACT_MIN` | `40` | Auto-compact trigger: compress when messages exceed this |
 | `NOVA_AGENT_COMPACT_KEEP` | `20` | Messages kept after compaction (earlier ones are summarized) |
-
 ---
 
 ## 🔧 Extending (no code required)
@@ -222,6 +227,8 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | PUT/DELETE | `/api/sessions/:id` | Rename/delete session |
 | GET | `/api/sessions/:id` | Get session (with messages) |
 | POST | `/api/sessions/:id/compact` | Manually compact context (LLM summarization) |
+| GET/POST/PUT/DELETE | `/api/tasks` | Scheduled task CRUD |
+| POST | `/api/tasks/:id/run` | Run a task on demand |
 | **POST** | **`/api/chat`** | **SSE streaming chat (core)** |
 | POST | `/api/chat/stop` | Abort current run |
 | GET/POST | `/api/config` | API key status/save |
@@ -232,7 +239,7 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 - **Virtual scrolling** for very long sessions (>500 messages)
 - **Multi-agent orchestration**: `POST /api/subagent` route (subagents with result aggregation)
-- **SQLite persistence** for larger-scale deployments
+- **Model registry** for multi-provider routing
 
 ---
 
