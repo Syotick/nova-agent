@@ -5,6 +5,8 @@ import SkillManager from './SkillManager'
 import TaskManager from './TaskManager'
 import ToolManager from './ToolManager'
 import ModelChannels from './ModelChannels'
+import MemoryManager from './MemoryManager'
+import McpManager from './McpManager'
 import { fmtTokens } from '../lib/utils'
 
 interface Props {
@@ -37,6 +39,8 @@ export default function MainPane({ view }: Props) {
   const isChatView = view === 'chat' || view === 'trajectory'
   const headerMeta: Record<string, { icon: string; title: string; sub: string }> = {
     models: { icon: '🧠', title: '模型渠道', sub: 'Model Providers' },
+    memories: { icon: '🧠', title: '记忆', sub: 'Memories' },
+    mcps: { icon: '🔌', title: 'MCP 服务器', sub: 'MCP Servers' },
     skills: { icon: '📚', title: '技能管理', sub: 'Skills' },
     tasks: { icon: '⏱️', title: '定时任务', sub: 'Tasks' },
     tools: { icon: '🧰', title: '工具浏览', sub: 'Tools' },
@@ -86,6 +90,8 @@ export default function MainPane({ view }: Props) {
         {view === 'chat' && <ChatView key="chat" />}
         {view === 'trajectory' && <TrajectoryView key="traj" />}
         {view === 'models' && <ModelChannels key="models" />}
+        {view === 'memories' && <MemoryManager key="memories" />}
+        {view === 'mcps' && <McpManager key="mcps" />}
         {view === 'skills' && <SkillManager key="skills" />}
         {view === 'tasks' && <TaskManager key="tasks" />}
         {view === 'tools' && <ToolManager key="tools" />}

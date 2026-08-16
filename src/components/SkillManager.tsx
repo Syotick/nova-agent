@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Pencil, Trash2, Search } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Plus, Pencil, Trash2, Search, Download, Upload } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { Button } from './ui/button'
@@ -16,6 +16,7 @@ export default function SkillManager() {
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState({ name: '', description: '', whenToUse: '', content: '' })
   const [saving, setSaving] = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
 
   const filtered = search.trim()
     ? skills.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase()))
@@ -46,6 +47,65 @@ export default function SkillManager() {
     useMainStore.setState({ skills: await api.listSkills() })
   }
 
+  // 导出单个技能为 JSON 文件
+  const exportSkill = (s: SkillMeta) => {
+    const blob = new Blob([JSON.stringify({ id: s.id, name: s.name, description: s.description, whenToUse: s.whenToUse ?? '', content: s.content }, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${s.id}.skill.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // 导出全部技能为一个 JSON 文件
+  const exportAll = () => {
+    const data = skills.map((s) => ({ id: s.id, name: s.name, description: s.description, whenToUse: s.whenToUse ?? '', content: s.content }))
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'skills-export.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // 导入技能（.json 文件，单个或数组）
+  const importSkills = async (files: FileList | null) => {
+    if (!files?.length) return
+    const imported: Array<{ name?: string; description?: string; whenToUse?: string; content?: string }> = []
+    for (const f of Array.from(files)) {
+      try {
+        const data = JSON.parse(await f.text())
+        if (Array.isArray(data)) imported.push(...data)
+        else imported.push(data)
+      } catch {
+        alert(`「${f.name}」不是有效的 JSON，已跳过`)
+      }
+    }
+    let ok = 0
+    let skipped = 0
+    for (const item of imported) {
+      if (!item || typeof item.name !== 'string' || !item.name.trim() || typeof item.content !== 'string') {
+        skipped++
+        continue
+      }
+      try {
+        await api.createSkill({
+          name: item.name.trim(),
+          description: item.description ?? '',
+          whenToUse: item.whenToUse ?? '',
+          content: item.content,
+        })
+        ok++
+      } catch {
+        skipped++
+      }
+    }
+    useMainStore.setState({ skills: await api.listSkills() })
+    alert(`导入完成：成功 ${ok} 个${skipped ? `，跳过 ${skipped} 个（同名会覆盖）` : ''}`)
+  }
+
   return (
     <div className="h-full overflow-y-auto px-8 py-7">
       <div className="mx-auto max-w-[860px]">
@@ -59,7 +119,16 @@ export default function SkillManager() {
               </p>
             </div>
           </div>
-          <Button onClick={openCreate}><Plus className="h-4 w-4" />新建技能</Button>
+          <div className="flex items-center gap-2">
+            <input ref={importRef} type="file" accept=".json" multiple className="hidden" onChange={(e) => { void importSkills(e.target.files); e.target.value = '' }} />
+            <Button variant="outline" onClick={() => importRef.current?.click()} title="导入 .json 技能文件（可多选）">
+              <Upload className="h-4 w-4" />导入
+            </Button>
+            <Button variant="outline" onClick={exportAll} disabled={!skills.length} title="导出全部技能为 JSON">
+              <Download className="h-4 w-4" />全部导出
+            </Button>
+            <Button onClick={openCreate}><Plus className="h-4 w-4" />新建技能</Button>
+          </div>
         </div>
 
         {/* 搜索 */}
@@ -84,6 +153,7 @@ export default function SkillManager() {
               </CardContent>
               <CardFooter className="gap-2">
                 <Button variant="outline" size="sm" onClick={() => openEdit(skill)}><Pencil className="h-3 w-3" />编辑</Button>
+                <Button variant="outline" size="sm" onClick={() => exportSkill(skill)} title="导出该技能为 JSON"><Download className="h-3 w-3" />导出</Button>
                 <Button variant="destructive" size="sm" onClick={() => void remove(skill)}><Trash2 className="h-3 w-3" />删除</Button>
               </CardFooter>
             </Card>

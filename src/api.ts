@@ -1,5 +1,5 @@
 // API 封装：REST + SSE 流式聊天
-import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo, Task, ModelProvider, Attachment, KeySource, CustomProvider, ReasoningOption } from './types'
+import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo, Task, ModelProvider, Attachment, KeySource, CustomProvider, ReasoningOption, Memory } from './types'
 
 const BASE = '/api'
 
@@ -24,6 +24,15 @@ export const api = {
 
   // catalogs
   listMcpServers: () => json<McpServerConfig[]>('/mcp-servers'),
+  listMcpServerStatus: () => json<Array<{ serverId: string; name: string; connected: boolean; toolCount: number; lastError?: string }>>('/mcp-servers/status'),
+  createMcpServer: (config: McpServerConfig) =>
+    json<{ config: McpServerConfig; status: unknown }>('/mcp-servers', { method: 'POST', body: JSON.stringify({ config }) }),
+  updateMcpServer: (id: string, config: McpServerConfig) =>
+    json<{ config: McpServerConfig; status: unknown }>(`/mcp-servers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ config }) }),
+  deleteMcpServer: (id: string) =>
+    json<{ ok: boolean }>(`/mcp-servers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  reconnectMcpServer: (id: string) =>
+    json<{ serverId: string; name: string; connected: boolean; toolCount: number; lastError?: string }>(`/mcp-servers/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
   listSkills: () => json<SkillMeta[]>('/skills'),
   listTools: () => json<ToolInfo[]>('/tools'),
   listModels: () => json<ModelProvider[]>('/models'),
@@ -87,6 +96,15 @@ export const api = {
     json<{ ok: boolean }>('/providers/custom', { method: 'POST', body: JSON.stringify(p) }),
   deleteCustomProvider: (id: string) =>
     json<{ ok: boolean }>(`/providers/custom/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // 跨会话记忆
+  listMemories: (agentId: string) => json<Memory[]>(`/memories?agentId=${encodeURIComponent(agentId)}`),
+  addMemory: (agentId: string, content: string) =>
+    json<{ memory: Memory; merged: boolean }>('/memories', { method: 'POST', body: JSON.stringify({ agentId, content }) }),
+  updateMemory: (id: string, content: string) =>
+    json<Memory>(`/memories/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ content }) }),
+  deleteMemory: (id: string) =>
+    json<{ ok: boolean }>(`/memories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
 // SSE 流式聊天：onEvent 回调返回一个 cancel 函数
