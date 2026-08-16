@@ -258,7 +258,7 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 **Engineering practices** (CI/CD, PR flow, project management research): see [docs/CICD-RESEARCH.md](./docs/CICD-RESEARCH.md) — trunk-based development, CI quality gates, conventional commits, Kanban/Milestone workflow.
 
-**Documentation**: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) (architecture for beginners) · [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) (zero-to-run guide) · [docs/CHANGELOG.md](./docs/CHANGELOG.md) (human-readable changelog) · [中文文档](./docs/README.zh-CN.md)
+**Documentation**: [docs/README.md](./docs/README.md) (docs index) · [中文文档](./docs/README.zh-CN.md)
 
 ---
 

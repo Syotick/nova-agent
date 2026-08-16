@@ -256,13 +256,12 @@ when_to_use: 使用时机
 
 ---
 
-## 📚 开发者文档
+## 📚 公开文档
 
-- [架构详解](./ARCHITECTURE.md)（大白话版）
-- [开发指南](./DEVELOPMENT.md)（零基础从装 Node.js 开始）
-- [变更记录](./CHANGELOG.md)（人读中文版）
 - [技术选型报告](./TECH-DECISION.md)
 - [CI/CD 与项目管理实践调研](./CICD-RESEARCH.md)
+
+> 开发者内部文档（教程/架构/维护手册）在本机 `devdocs/` 目录，不随仓库发布。
 
 ---
 
