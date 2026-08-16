@@ -15,6 +15,7 @@ export const db = new DatabaseSync(DB_PATH)
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
+  PRAGMA busy_timeout = 5000;
 
   CREATE TABLE IF NOT EXISTS agents (
     id            TEXT PRIMARY KEY,

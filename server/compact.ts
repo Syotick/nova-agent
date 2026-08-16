@@ -1,8 +1,7 @@
 // 上下文压缩：真实 summarization（LLM 总结旧消息）+ 自动触发策略
 import { generateText } from 'ai'
-import { createDeepSeek } from '@ai-sdk/deepseek'
 import type { Agent, Message, Session } from './types.js'
-import { resolveApiKey } from './store.js'
+import { createModel } from './models.js'
 
 // 策略参数（可用环境变量覆盖）
 export const COMPACT_MIN_MESSAGES = Number(process.env.NOVA_AGENT_COMPACT_MIN ?? 40) // 超过该条数才压缩
@@ -34,7 +33,7 @@ export async function summarizeMessages(messages: Message[], model: string): Pro
     .slice(-30000) // 截断超长输入，防止超出模型上下文
 
   const { text } = await generateText({
-    model: createDeepSeek({ apiKey: resolveApiKey() })(model),
+    model: createModel(model),
     system:
       '你是对话摘要引擎。请把用户提供的对话记录压缩成一份简洁的上下文摘要，供后续对话继续使用。要求：\n' +
       '1. 保留：用户的目标与需求、关键事实/决定、已完成的工作、未完成或待办事项、重要数据与结论\n' +
