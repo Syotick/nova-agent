@@ -12,6 +12,7 @@ export const useMainStore = defineStore('main', {
     mcpServers: [] as McpServerConfig[],
     skills: [] as SkillMeta[],
     streaming: false,
+    compacting: false, // 手动压缩进行中
     currentText: '', // 流式中的临时文本
     currentToolCalls: [] as ToolCallRecord[], // 流式中的临时工具调用
     error: '' as string,
@@ -158,6 +159,27 @@ export const useMainStore = defineStore('main', {
       this.currentToolCalls = []
     },
 
+    async compactSession() {
+      const session = this.currentSession
+      if (!session || this.compacting || this.streaming) return
+      this.compacting = true
+      try {
+        const res = await api.compactSession(session.id)
+        if (res.skipped) {
+          return { skipped: true, message: res.message }
+        }
+        if (res.summary !== undefined) {
+          session.summary = res.summary
+          if (typeof res.removed === 'number' && session.messages.length >= res.removed) {
+            session.messages.splice(0, res.removed)
+          }
+        }
+        return res
+      } finally {
+        this.compacting = false
+      }
+    },
+
     cancelStream() {
       if (this.cancelFn) {
         this.cancelFn()
@@ -258,6 +280,15 @@ export const useMainStore = defineStore('main', {
           break
         case 'usage':
           break
+        case 'compact': {
+          // 服务端已压缩：移除最早 removed 条消息，保存摘要
+          const removed = e.removed
+          if (session.messages.length >= removed) {
+            session.messages.splice(0, removed)
+          }
+          session.summary = e.summary
+          break
+        }
         case 'done': {
           // 服务端已固化，用服务端消息替换流式容器
           session.messages.push(e.message)

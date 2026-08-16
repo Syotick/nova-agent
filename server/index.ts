@@ -10,6 +10,7 @@ import {
 import { connectServer, getConnections } from './mcp.js'
 import { loadSkills, saveSkill, deleteSkill } from './skills.js'
 import { runTurn, abortRun } from './agentLoop.js'
+import { shouldCompact, compactSession } from './compact.js'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
@@ -246,21 +247,23 @@ app.post('/api/chat/stop', (req, res) => {
   res.json({ ok: true })
 })
 
-// ---------- 手动压缩（可选，简化：保留最近 10 条，其余交给前端提示） ----------
-app.post('/api/sessions/:id/compact', (req, res) => {
+// ---------- 手动压缩（真实 summarization：LLM 总结旧消息） ----------
+app.post('/api/sessions/:id/compact', async (req, res) => {
   const session = getSession(req.params.id)
   if (!session) return res.status(404).json({ error: 'session not found' })
-  if (session.messages.length <= 20) {
+  if (!shouldCompact(session)) {
     return res.json({ ok: true, skipped: true, message: '会话还不够长，无需压缩' })
   }
-  // 极简：截断到最近 20 条，写入占位提示（真实 summarization 留给后续）
-  const kept = session.messages.slice(-20)
-  session.messages = [
-    { id: newId('msg'), role: 'user', content: '<compacted-summary>较早的对话已被压缩，保留最近 20 条消息。</compacted-summary>', createdAt: Date.now() },
-    ...kept,
-  ]
-  saveSession(session)
-  res.json({ ok: true, skipped: false })
+  const agent = getAgent(session.agentId)
+  if (!agent) return res.status(500).json({ error: 'agent not found' })
+
+  try {
+    const result = await compactSession(session, agent)
+    saveSession(session)
+    res.json({ ok: true, skipped: false, ...result })
+  } catch (err) {
+    res.status(500).json({ error: `压缩失败: ${(err as Error).message}` })
+  }
 })
 
 // ---------- 健康检查 ----------

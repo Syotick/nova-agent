@@ -16,6 +16,8 @@
 - ✅ **工具调用展示**：实时工具卡片（输入/输出/耗时/状态）
 - ✅ **轨迹视图**：每步工具调用时间线 + inspector（输入/输出/耗时/token）
 - ✅ **中断/继续**：流式期间 Stop 按钮，已生成内容保留
+- ✅ **自动压缩**：会话超过 40 条消息时，LLM 自动总结旧对话为摘要（注入 system prompt），保留最近 20 条
+- ✅ **手动压缩**：会话顶部一键压缩上下文，摘要横幅展示历史总结
 
 ### 多 Agent 管理
 - ✅ 新建 / 编辑 / 删除 Agent（persona + 模型 + 工具勾选 + 技能勾选）
@@ -211,9 +213,18 @@ when_to_use: 使用时机
 
 - **单会话超长**（>500 条消息）：全量渲染，可加虚拟滚动优化
 - **multi-agent 编排**：`POST /api/subagent` 路由预留（当前 501）
-- **自动压缩**：`/compact` 已有路由，真实 summarization 待接
 - **持久化**：JSON 文件（够用），大规模可换 SQLite
 - **模型**：默认 DeepSeek v4-flash（`deepseek-chat` 已停用，勿回退）
+
+### 上下文压缩（已实现）
+
+| 项 | 说明 |
+|---|---|
+| 自动触发 | 消息数 > 40（`MY_AGENT_COMPACT_MIN` 可调）时，turn 开始前自动压缩 |
+| 保留条数 | 最近 20 条（`MY_AGENT_COMPACT_KEEP` 可调），更早消息由 LLM 总结 |
+| 摘要去向 | `session.summary` 字段；注入 system prompt 供模型续接；前端横幅展示 |
+| 手动压缩 | `POST /api/sessions/:id/compact`（原占位路由已升级为真实 summarization） |
+| 失败兜底 | 压缩失败不阻塞对话，保留原历史继续 |
 
 ---
 

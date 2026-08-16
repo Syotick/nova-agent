@@ -61,6 +61,8 @@ export interface Session {
   messages: Message[]
   createdAt: number
   updatedAt: number
+  /** 最近一次压缩生成的上下文摘要 */
+  summary?: string
 }
 
 export type ChatEvent =
@@ -70,4 +72,5 @@ export type ChatEvent =
   | { type: 'step'; step: number }
   | { type: 'usage'; input: number; output: number }
   | { type: 'done'; message: Message }
+  | { type: 'compact'; summary: string; removed: number; kept: number }
   | { type: 'error'; message: string }
