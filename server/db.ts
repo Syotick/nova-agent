@@ -10,6 +10,9 @@ const DATA_DIR = join(process.cwd(), 'data')
 const DB_PATH = join(DATA_DIR, 'nova-agent.db')
 const BACKUP_DIR = join(DATA_DIR, 'imported-json-backup')
 
+// 全新环境（CI/首次运行）没有 data 目录，必须先创建，否则 SQLite 打不开
+mkdirSync(DATA_DIR, { recursive: true })
+
 export const db = new DatabaseSync(DB_PATH)
 
 db.exec(`
