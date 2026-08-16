@@ -65,6 +65,22 @@ export interface Session {
   summary?: string
 }
 
+/** 定时任务（5 段 cron） */
+export interface Task {
+  id: string
+  name: string
+  agentId: string
+  cron: string
+  prompt: string
+  enabled: boolean
+  sessionId?: string
+  lastRunAt?: number
+  nextRunAt?: number
+  lastResult?: string
+  runCount: number
+  createdAt: number
+}
+
 export type ChatEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool_call_start'; call: ToolCallRecord }

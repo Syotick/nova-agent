@@ -58,6 +58,23 @@ export interface Session {
   summary?: string
 }
 
+// 定时任务（5 段 cron：分 时 日 月 周；如 "0 每5分钟" 示例见 scheduler.ts）
+export interface Task {
+  id: string
+  name: string
+  agentId: string
+  cron: string
+  prompt: string
+  enabled: boolean
+  /** 任务专用会话（首次执行自动创建，之后复用保证上下文连续） */
+  sessionId?: string
+  lastRunAt?: number
+  nextRunAt?: number
+  lastResult?: string
+  runCount: number
+  createdAt: number
+}
+
 // SSE 事件类型
 export type ChatEvent =
   | { type: 'text'; delta: string }

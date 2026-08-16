@@ -1,5 +1,5 @@
 // API 封装：REST + SSE 流式聊天
-import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo } from './types'
+import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo, Task } from './types'
 
 const BASE = '/api'
 
@@ -45,6 +45,15 @@ export const api = {
       `/sessions/${id}/compact`, { method: 'POST' }),
 
   stopChat: (sessionId: string) => json<{ ok: boolean }>('/chat/stop', { method: 'POST', body: JSON.stringify({ sessionId }) }),
+
+  // tasks（定时任务）
+  listTasks: () => json<Task[]>('/tasks'),
+  createTask: (body: { name: string; agentId: string; cron: string; prompt?: string }) =>
+    json<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) }),
+  updateTask: (id: string, body: Partial<{ name: string; cron: string; prompt: string; enabled: boolean }>) =>
+    json<Task>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  runTask: (id: string) => json<{ ok: boolean; result: string }>(`/tasks/${id}/run`, { method: 'POST' }),
+  deleteTask: (id: string) => json<{ ok: boolean }>(`/tasks/${id}`, { method: 'DELETE' }),
 
   // config
   getConfig: () => json<{ hasApiKey: boolean; apiKeySource: string }>('/config'),

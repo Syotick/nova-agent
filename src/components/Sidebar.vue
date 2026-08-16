@@ -157,6 +157,14 @@
         </div>
         <div
           class="nav-item"
+          :class="{ active: view === 'tasks' }"
+          @click="$emit('navigate', 'tasks')"
+        >
+          <span class="nav-icon">⏱️</span>
+          <span class="nav-label">定时任务</span>
+        </div>
+        <div
+          class="nav-item"
           :class="{ active: view === 'tools' }"
           @click="$emit('navigate', 'tools')"
         >
