@@ -1,0 +1,7 @@
+{
+  "id": "playwright",
+  "name": "Playwright 浏览器",
+  "command": "node",
+  "args": ["node_modules/@playwright/mcp/cli.js"],
+  "timeoutMs": 120000
+}

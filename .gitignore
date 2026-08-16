@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist-server/
+
+# 运行时数据（Agent/Session/配置）
+data/
+
+# Agent 工作区（运行时生成）
+workspace/
+
+# 凭据（即使误放也绝不入库）
+.my-agent-key.json
+*.key
+.env
+.env.*
+
+# playwright 调试缓存
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
