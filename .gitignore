@@ -5,8 +5,13 @@ node_modules/
 dist/
 dist-server/
 
-# 运行时数据（Agent/Session/配置）
+# 运行时数据（Agent/Session/配置/SQLite）
 data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # Agent 工作区（运行时生成）
 workspace/
