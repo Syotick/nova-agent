@@ -256,6 +256,8 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 **Why not LangChain/LangGraph/CrewAI?** See [TECH-DECISION.md](./TECH-DECISION.md) — measured on this machine: LangChain 48.9MB / 5,577 files vs. our agent logic layer at 11.5MB; standard protocols beat framework abstractions.
 
+**Engineering practices** (CI/CD, PR flow, project management research): see [docs/CICD-RESEARCH.md](./docs/CICD-RESEARCH.md) — trunk-based development, CI quality gates, conventional commits, Kanban/Milestone workflow.
+
 ---
 
 ## 📄 License
