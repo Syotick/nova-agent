@@ -37,3 +37,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# 内部开发文档（教程/学习/维护笔记，仅本机，不上传 GitHub）
+devdocs/
