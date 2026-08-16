@@ -15,7 +15,7 @@ import { shouldCompact, compactSession } from './compact.js'
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
-const PORT = Number(process.env.MY_AGENT_PORT ?? 8787)
+const PORT = Number(process.env.NOVA_AGENT_PORT ?? 8787)
 
 // ---------- MCP server 配置（mcp-servers/*.json） ----------
 function loadMcpConfigs(): McpServerConfig[] {
@@ -278,7 +278,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`[server] my-agent API listening on http://localhost:${PORT}`)
+  console.log(`[server] nova-agent API listening on http://localhost:${PORT}`)
   console.log(`[server] MCP servers: ${mcpConfigs.map((c) => c.id).join(', ') || '(none)'}`)
   console.log(`[server] Skills: ${loadSkills().map((s) => s.id).join(', ') || '(none)'}`)
   console.log(`[server] DEEPSEEK_API_KEY set: ${Boolean(process.env.DEEPSEEK_API_KEY)}`)

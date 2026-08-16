@@ -1,6 +1,6 @@
 # 技术选型调研报告：为什么用「AI SDK + MCP + Agent Skills」自组装，而不是 LangChain / LangGraph / CrewAI
 
-> 项目：my-agent（麻雀版 Claude Code）
+> 项目：nova-agent（开源 AI Agent）
 > 日期：2026-08
 > 结论先行：**我们的技术栈（Vercel AI SDK + MCP 协议 + Agent Skills + 自研 50 行 Agent 循环）在"最小可用 + 可扩展 + 标准协议"三个维度上全面优于 LangChain / LangGraph / CrewAI。**
 > 依据：官方文档 + 社区实测 + **本机实测依赖体积/安装耗时**（数据见 §6）。
@@ -11,7 +11,7 @@
 
 | 需求 | 说明 |
 |---|---|
-| 麻雀虽小五脏俱全 | 工具/技能/多轮/轨迹/多 agent/会话/动画，全都要但都要薄 |
+| 小巧但五脏俱全 | 工具/技能/多轮/轨迹/多 agent/会话/动画，全都要但都要薄 |
 | 不花时间在工程构建 | 无 monorepo、无重脚手架、半天跑通 |
 | 工具用最广泛协议 | → MCP（已捐 Linux Foundation，"AI 的 USB-C"） |
 | 技能用最广泛格式 | → Agent Skills（SKILL.md，Claude Code/Cursor/Windsurf 事实标准） |
@@ -105,7 +105,7 @@
 | **与标准协议关系** | **原生即标准** | 标准之上套抽象 | 同左 | 同左 |
 | **可审计/透明** | 全自研可控，代码可读 | 黑盒抽象多 | 黑盒抽象多 | 黑盒抽象多 |
 
-**一句话**：LangChain 系框架的价值 = 帮你省那 50 行 loop + 给你一堆用不上的抽象；代价 = 48-50MB 依赖、学习曲线、版本绑定、黑盒。**在"麻雀"项目里，这买卖亏。**
+**一句话**：LangChain 系框架的价值 = 帮你省那 50 行 loop + 给你一堆用不上的抽象；代价 = 48-50MB 依赖、学习曲线、版本绑定、黑盒。**在 nova-agent 这样的小巧型项目里，这买卖亏。**
 
 ---
 
@@ -165,4 +165,4 @@
 5. **MCP + Agent Skills**：工具层/技能层直接采用行业标准，**新增能力零代码** —— **核心选择**。
 6. **50 行自研 agent loop**：编排层保持透明可控 —— **核心选择**。
 
-**最终技术栈**：Vue 2.7 + Pinia + Vite（前端）｜Express + Vercel AI SDK + MCP SDK（后端）｜Agent Skills（技能）—— 已在 my-agent 项目落地并通过浏览器操作端到端验收。
+**最终技术栈**：Vue 2.7 + Pinia + Vite（前端）｜Express + Vercel AI SDK + MCP SDK（后端）｜Agent Skills（技能）—— 已在 nova-agent 项目落地并通过浏览器操作端到端验收。

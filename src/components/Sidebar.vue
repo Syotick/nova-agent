@@ -15,8 +15,8 @@
         </svg>
       </div>
       <div class="brand-text">
-        <span class="brand-name">my-agent</span>
-        <span class="brand-sub">麻雀版 Claude Code</span>
+        <span class="brand-name">nova-agent</span>
+        <span class="brand-sub">Open-Source AI Agent</span>
       </div>
     </div>
 

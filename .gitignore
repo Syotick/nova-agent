@@ -12,6 +12,7 @@ data/
 workspace/
 
 # 凭据（即使误放也绝不入库）
+.nova-agent-key.json
 .my-agent-key.json
 *.key
 .env
