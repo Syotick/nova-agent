@@ -8,17 +8,29 @@ import { injectSkills } from './skills.js'
 import { shouldCompact, compactSession } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools } from './builtinTools.js'
+import { newId } from './store.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
 // （可环境变量覆盖：NOVA_AGENT_MAX_STEPS）
 const MAX_STEPS = Number(process.env.NOVA_AGENT_MAX_STEPS ?? 24)
 
+// 子 Agent 嵌套深度上限：主(0) → 子(1) → 孙(2) → 曾孙(3)，最多 3 层
+const MAX_SUBAGENT_DEPTH = Number(process.env.NOVA_AGENT_MAX_SUBAGENT_DEPTH ?? 3)
+
 // 中断注册表：sessionId -> abort
 const activeRuns = new Map<string, { abort: () => void }>()
+// 子任务注册表：主 sessionId -> 子任务 abort 集合（主中断时连带中断子任务，防幽灵执行）
+const activeSubruns = new Map<string, Set<() => void>>()
 
 export function abortRun(sessionId: string) {
   const run = activeRuns.get(sessionId)
   if (run) run.abort()
+  // 连带中断该主 turn 的所有活动子任务
+  const subs = activeSubruns.get(sessionId)
+  if (subs) {
+    for (const abortChild of subs) abortChild()
+    activeSubruns.delete(sessionId)
+  }
 }
 
 export async function runTurn(
@@ -28,6 +40,7 @@ export async function runTurn(
   push: (e: ChatEvent) => void,
   attachments?: Attachment[],
   reasoning?: ReasoningOption,
+  depth = 0, // 子 Agent 嵌套深度（主 turn = 0；subagent 工具每次 +1）
 ): Promise<Message> {
   const emit = push
 
@@ -120,11 +133,124 @@ export async function runTurn(
     })
   }
 
+  // 内置工具：subagent（子 Agent 编排，所有 Agent 自动拥有）
+  // 子任务 = 内存临时会话 + 完整独立 loop（无 SSE）；只把最终文本/结构化错误交回主 Agent。
+  // 失败策略（业界调研）：返回原因 + 部分产出，由主 Agent 决策，不盲目重试、禁止编造结果。
+  tools['subagent'] = tool({
+    description:
+      '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），完成后返回其最终结论。' +
+      '适合：多个方向并行探索、独立审查、把大任务拆成小任务。task 必须是自包含的描述（目标+约束+交付格式）。' +
+      '失败处理：子任务返回 ERROR 时——有明确原因就修正 task 后重试最多 1 次；有部分产出就基于部分产出继续；不可恢复就停止并告知用户，禁止编造子任务结果。',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        task: { type: 'string', description: '子任务描述（自包含：目标 + 约束 + 交付格式）' },
+        model: { type: 'string', description: '可选：子 Agent 模型（provider/model），默认继承当前 Agent' },
+      },
+      required: ['task'],
+    }),
+    execute: async (args) => {
+      const task = String((args as { task?: unknown }).task ?? '').trim()
+      const modelOverride = String((args as { model?: unknown }).model ?? '').trim() || undefined
+      const record: ToolCallRecord = {
+        id: uid(),
+        name: 'subagent',
+        input: args,
+        output: '',
+        status: 'running',
+        startedAt: Date.now(),
+        durationMs: 0,
+      }
+      segments.push({ kind: 'tool', call: record })
+      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
+      try {
+        if (!task) {
+          record.output = 'ERROR: task required'
+          record.status = 'error'
+          record.durationMs = Date.now() - record.startedAt
+          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          return { content: 'Error: task 参数必填', isError: true }
+        }
+        // 深度限制：防止无限递归（每层都是完整 loop，成本随深度爆炸）
+        if (depth >= MAX_SUBAGENT_DEPTH) {
+          record.output = `ERROR: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层）`
+          record.status = 'error'
+          record.durationMs = Date.now() - record.startedAt
+          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          return { content: `Error: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层），请直接在当前层完成`, isError: true }
+        }
+
+        // 子任务：内存临时会话（不入库），完整独立 loop，静默执行（no-op emit）
+        const subSession: Session = {
+          id: newId('sub'),
+          agentId: agent.id,
+          title: `[子任务] ${task.slice(0, 30)}`,
+          messages: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        const subAgent = modelOverride ? { ...agent, model: modelOverride } : agent
+
+        // 中断传播：主 turn 中断时连带 abort 子任务（防幽灵执行）
+        const subs = activeSubruns.get(session.id) ?? new Set<() => void>()
+        activeSubruns.set(session.id, subs)
+        const abortChild = () => abortRun(subSession.id)
+        subs.add(abortChild)
+
+        const partialOf = () => {
+          const last = [...subSession.messages].reverse().find((m) => m.role === 'assistant')
+          return last?.content?.trim() ? last.content.slice(0, 500) : ''
+        }
+        try {
+          const msg = await runTurn(subSession, subAgent, task, () => {}, undefined, undefined, depth + 1)
+          if (msg.content) {
+            record.output = msg.content
+            record.status = 'success'
+            record.durationMs = Date.now() - record.startedAt
+            emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+            return { content: msg.content }
+          }
+          // 子任务未产出内容（中断等）：附上部分产出，让主 Agent 判断
+          const partial = partialOf()
+          const out = `Error: 子任务未产出内容${partial ? `。部分产出：${partial}` : ''}`
+          record.output = out
+          record.status = 'error'
+          record.durationMs = Date.now() - record.startedAt
+          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          return { content: out, isError: true }
+        } catch (err) {
+          // 子任务执行失败（模型 401/网络等）：返回原因 + 部分产出（诊断上下文，避免主 Agent 盲重试/编造）
+          const partial = partialOf()
+          const out = `Error: 子任务失败（${(err as Error).message}）${partial ? `。部分产出：${partial}` : ''}`
+          record.output = out
+          record.status = 'error'
+          record.durationMs = Date.now() - record.startedAt
+          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          return { content: out, isError: true }
+        } finally {
+          subs.delete(abortChild)
+          if (subs.size === 0) activeSubruns.delete(session.id)
+        }
+      } catch (err) {
+        record.output = `ERROR: ${(err as Error).message}`
+        record.status = 'error'
+        record.durationMs = Date.now() - record.startedAt
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return { content: `Error: 子任务调度失败（${(err as Error).message}）`, isError: true }
+      }
+    },
+  })
+
   // system prompt = persona + 技能注入 + 历史摘要（压缩后存在）+ 执行约束 + 工具选择策略
   const summaryBlock = session.summary
     ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
     : ''
-  const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。\n\n# 工具选择策略（重要）\n- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。\n- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。\n- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。`
+  const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。\n\n# 工具选择策略（重要）\n- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。\n- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。\n- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。
+
+# 子 Agent 编排（subagent）
+- 复杂任务可派生子 Agent 并行执行（同一轮多个 subagent 调用会并行跑）：每个 task 必须自包含（目标+约束+交付格式）；可并行拆分的方向不要串行做。
+- 子任务失败（返回 ERROR）时：有明确原因 → 修正 task 后重试最多 1 次；有部分产出 → 基于部分产出继续；不可恢复 → 立即停止并告知用户。禁止编造子任务结果或虚构其细节。
+- 子任务结论直接引用其返回文本，不要添加未在返回中出现的具体信息。`
   const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${stepBudget}`
 
   // 历史消息（AI SDK 格式）
