@@ -1,5 +1,5 @@
 {
-  "name": "my-agent",
+  "name": "nova-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -5,8 +5,8 @@ import type { Agent, Message, Session } from './types.js'
 import { resolveApiKey } from './store.js'
 
 // 策略参数（可用环境变量覆盖）
-export const COMPACT_MIN_MESSAGES = Number(process.env.MY_AGENT_COMPACT_MIN ?? 40) // 超过该条数才压缩
-export const COMPACT_KEEP = Number(process.env.MY_AGENT_COMPACT_KEEP ?? 20) // 保留最近 N 条消息
+export const COMPACT_MIN_MESSAGES = Number(process.env.NOVA_AGENT_COMPACT_MIN ?? 40) // 超过该条数才压缩
+export const COMPACT_KEEP = Number(process.env.NOVA_AGENT_COMPACT_KEEP ?? 20) // 保留最近 N 条消息
 const SUMMARY_MAX_CHARS = 2000 // 摘要长度上限（字符）
 
 export interface CompactResult {

@@ -29,7 +29,7 @@ export async function connectServer(config: McpServerConfig): Promise<McpConnect
   if (existing) return existing
 
   const client = new Client(
-    { name: 'my-agent', version: '0.1.0' },
+    { name: 'nova-agent', version: '0.1.0' },
     { capabilities: {} },
   )
   const transport = new StdioClientTransport({

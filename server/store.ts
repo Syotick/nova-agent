@@ -30,7 +30,7 @@ export function saveConfig(config: AppConfig) {
 
 // 解析 key 优先级：项目外存储 > 环境变量
 // （key 存在项目外，避免 agent 通过 filesystem 工具读取到项目内的 key）
-const EXTERNAL_KEY_PATH = join(dirname(process.cwd()), '.my-agent-key.json')
+const EXTERNAL_KEY_PATH = join(dirname(process.cwd()), '.nova-agent-key.json')
 
 export function resolveApiKey(): string | undefined {
   try {
