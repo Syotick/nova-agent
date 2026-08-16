@@ -38,14 +38,32 @@ export interface ToolCallRecord {
   durationMs: number
 }
 
+/** 消息附件（用户上传，存 workspace/uploads/，Agent 可经 filesystem 工具读取） */
+export interface Attachment {
+  id: string
+  name: string
+  /** 相对 workspace 的路径，如 uploads/abc.png */
+  path: string
+  size: number
+  mime: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   toolCalls?: ToolCallRecord[]
+  attachments?: Attachment[]
   tokens?: { input: number; output: number }
   createdAt: number
+  /** 时间线分段：文本与工具调用按发生顺序交错（DSH 风格渲染）。缺省 = 旧数据（content + toolCalls） */
+  segments?: MessageSegment[]
 }
+
+/** 消息时间线段：文本块 或 工具调用块（按发生顺序） */
+export type MessageSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; call: ToolCallRecord }
 
 export interface Session {
   id: string
@@ -75,13 +93,21 @@ export interface Task {
   createdAt: number
 }
 
-// SSE 事件类型
+// SSE 事件类型（统一带 sessionId，前端据此路由事件，避免会话竞态）
 export type ChatEvent =
-  | { type: 'text'; delta: string }
-  | { type: 'tool_call_start'; call: ToolCallRecord }
-  | { type: 'tool_call_end'; call: ToolCallRecord }
-  | { type: 'step'; step: number }
-  | { type: 'usage'; input: number; output: number }
-  | { type: 'done'; message: Message }
-  | { type: 'compact'; summary: string; removed: number; kept: number }
-  | { type: 'error'; message: string }
+  | { type: 'text'; sessionId: string; delta: string }
+  | { type: 'tool_call_start'; sessionId: string; call: ToolCallRecord }
+  | { type: 'tool_call_end'; sessionId: string; call: ToolCallRecord }
+  | { type: 'step'; sessionId: string; step: number }
+  | { type: 'usage'; sessionId: string; input: number; output: number }
+  | { type: 'done'; sessionId: string; message: Message }
+  | { type: 'compact'; sessionId: string; summary: string; removed: number; kept: number }
+  | { type: 'error'; sessionId: string; message: string }
+
+/** 思考模式（reasoning）配置：DeepSeek 渠道专用 */
+export interface ReasoningOption {
+  /** adaptive=自动按需思考 / enabled=强制思考 / disabled=关闭 */
+  type: 'adaptive' | 'enabled' | 'disabled'
+  /** 思考强度（type=enabled 时生效） */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+}

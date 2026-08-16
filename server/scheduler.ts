@@ -21,7 +21,7 @@ function parseField(field: string, min: number, max: number): CronField {
   let wildcard = false
   for (const part of field.split(',')) {
     const m = part.match(/^(\*|\d+)(?:-(\d+))?(?:\/(\d+))?$/)
-    if (!m) continue
+    if (!m) throw new Error(`invalid cron field "${field}" (part "${part}"): expected number, range, step or "*"`)
     let start: number
     let end: number
     if (m[1] === '*') {

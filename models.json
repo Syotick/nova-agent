@@ -1,0 +1,25 @@
+[
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "baseUrl": "https://api.deepseek.com",
+    "apiKeyEnv": "DEEPSEEK_API_KEY",
+    "models": [
+      {
+        "id": "deepseek-v4-flash",
+        "name": "v4-flash（快速，默认）"
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "name": "v4-pro（更强推理）",
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      }
+    ]
+  }
+]

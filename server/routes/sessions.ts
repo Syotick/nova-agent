@@ -1,10 +1,54 @@
-// 会话路由（含手动压缩）
+// 会话路由（含手动压缩 + 全文搜索）
 import express from 'express'
-import type { Session } from '../types.js'
+import type { Session, Message } from '../types.js'
 import { listSessions, getSession, saveSession, deleteSession, getAgent, newId } from '../store.js'
 import { shouldCompact, compactSession } from '../compact.js'
 
 export const sessionsRouter = express.Router()
+
+// 命中片段截取：关键词前后各 40 字符，总长 ≤ 160（避免返回完整消息内容）
+function snippet(content: string, q: string): string {
+  const idx = content.toLowerCase().indexOf(q)
+  const start = Math.max(0, idx - 40)
+  const slice = content.slice(start, start + 160)
+  return (start > 0 ? '…' : '') + slice + (content.length > start + 160 ? '…' : '')
+}
+
+// 全文搜索：GET /api/sessions/search?q=关键词（在全部会话消息里匹配）
+sessionsRouter.get('/search', (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : ''
+  if (!q) return res.json([])
+  const results: Array<{
+    sessionId: string
+    title: string
+    agentId: string
+    messageId: string
+    role: 'user' | 'assistant'
+    content: string
+    createdAt: number
+  }> = []
+  for (const s of listSessions()) {
+    for (const m of s.messages) {
+      if (m.content && m.content.toLowerCase().includes(q)) {
+        results.push({
+          sessionId: s.id,
+          title: s.title,
+          agentId: s.agentId,
+          messageId: m.id,
+          role: m.role,
+          // 只返回命中片段，不返回完整消息内容（配合无认证场景减小暴露面）
+          content: snippet(m.content, q),
+          createdAt: m.createdAt,
+        })
+        if (results.length >= 100) break
+      }
+    }
+    if (results.length >= 100) break
+  }
+  // 按时间倒序
+  results.sort((a, b) => b.createdAt - a.createdAt)
+  res.json(results)
+})
 
 sessionsRouter.get('/', (req, res) => {
   const agentId = typeof req.query.agentId === 'string' ? req.query.agentId : undefined

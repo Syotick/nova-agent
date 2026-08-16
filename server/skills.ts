@@ -87,6 +87,8 @@ export function saveSkill(input: { id?: string; name: string; description: strin
 
 // 删除技能（删除整个目录）
 export function deleteSkill(id: string): boolean {
+  // 防路径穿越：id 必须是安全字符（字母数字中文连字符），拒绝 / \ .. 等
+  if (!/^[\w\u4e00-\u9fa5-]+$/.test(id)) return false
   const dir = join(SKILLS_ROOT, id)
   if (!existsSync(dir)) return false
   rmSync(dir, { recursive: true, force: true })

@@ -1,12 +1,13 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue2'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': process.env.NOVA_API_PROXY ?? 'http://localhost:8787',
     },
   },
 })
