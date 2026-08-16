@@ -4,7 +4,7 @@
 
 > 小巧但完整：Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离 —— 全部具备且可扩展。
 
-[English README](./README.md)
+[English README](../README.md)
 
 ---
 
@@ -133,9 +133,9 @@ nova-agent/
 ├─ mcp-servers/               # MCP server 配置（JSON）
 │  ├─ filesystem.json
 │  └─ playwright.json
-├─ data/                      # 运行时数据（Agent/Session JSON，不入库）
+├─ data/                      # 运行时数据（SQLite 数据库，不入库）
 ├─ workspace/                 # Agent 唯一可访问的工作区（不入库）
-├─ TECH-DECISION.md           # 技术选型调研报告
+├─ docs/                      # 开发者文档（架构/开发指南/变更记录/中文版说明）
 └─ package.json
 ```
 
@@ -241,7 +241,7 @@ when_to_use: 使用时机
 
 ---
 
-## 🛠️ 技术选型（详见 TECH-DECISION.md）
+## 🛠️ 技术选型（详见 [TECH-DECISION.md](./TECH-DECISION.md)）
 
 | 层 | 选型 | 理由 |
 |---|---|---|
@@ -253,6 +253,16 @@ when_to_use: 使用时机
 | 动画 | Vue 内置 transition | 零依赖 |
 
 **为什么不用 LangChain/LangGraph/CrewAI**：见 [TECH-DECISION.md](./TECH-DECISION.md) —— 本机实测 LangChain 48.9MB / 5577 文件，本项目 Agent 逻辑层仅 11.5MB，标准协议 > 框架抽象。
+
+---
+
+## 📚 开发者文档
+
+- [架构详解](./ARCHITECTURE.md)（大白话版）
+- [开发指南](./DEVELOPMENT.md)（零基础从装 Node.js 开始）
+- [变更记录](./CHANGELOG.md)（人读中文版）
+- [技术选型报告](./TECH-DECISION.md)
+- [CI/CD 与项目管理实践调研](./CICD-RESEARCH.md)
 
 ---
 

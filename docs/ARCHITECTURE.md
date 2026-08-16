@@ -2,6 +2,7 @@
 
 > 这份文档用**大白话**讲清楚 Nova Agent 是怎么运转的。不需要 Node.js 基础也能看懂。
 > 配合 [DEVELOPMENT.md](./DEVELOPMENT.md) 一起看效果更佳。
+> 中文版项目说明见 [README.zh-CN.md](./README.zh-CN.md)。
 
 ---
 
@@ -170,10 +171,14 @@ nova-agent/
 ├─ mcp-servers/            # 工具服务器配置（JSON 文件）
 ├─ data/                   # 运行时数据（SQLite 数据库，已被 git 忽略）
 ├─ workspace/              # Agent 唯一能访问的工作区（已被 git 忽略）
-├─ docs/                   # 文档（本文件所在目录）
-└─ .github/workflows/      # CI/CD 自动化配置
-   ├─ ci.yml               # 每次推送自动跑：类型检查 + 构建
-   └─ release.yml          # 自动发版（release-please）
+├─ docs/                   # 开发者文档（入口见 docs/README.md）
+├─ README.md               # GitHub 首页展示（英文）
+├─ LICENSE                 # MIT 开源协议
+├─ CONTRIBUTING.md         # 贡献指南（提交规范/PR 流程）
+├─ .github/workflows/      # CI/CD 自动化配置
+│  ├─ ci.yml               # 每次推送自动跑：类型检查 + 构建
+│  └─ release.yml          # 自动发版（release-please）
+└─ release-please-config.json / .release-please-manifest.json  # 自动发版配置
 ```
 
 ---
@@ -243,7 +248,7 @@ cron 时间到了吗？
 
 ## 9. 技术选型为什么是这些（一句话版）
 
-详细调研见 [TECH-DECISION.md](../TECH-DECISION.md)，这里只说结论：
+详细调研见 [TECH-DECISION.md](./TECH-DECISION.md)，这里只说结论：
 
 - **Vue 2.7 + Vite**：界面框架，生态成熟
 - **Express**：后端框架，简单直接

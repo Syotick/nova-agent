@@ -4,7 +4,7 @@
 
 > Compact by design, complete by default: agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, and sandboxed security — all included and extensible.
 
-[中文文档](./README.zh-CN.md)
+[中文文档](./docs/README.zh-CN.md)
 
 ---
 
@@ -136,9 +136,9 @@ nova-agent/
 ├─ mcp-servers/               # MCP server configs (JSON)
 │  ├─ filesystem.json
 │  └─ playwright.json
-├─ data/                      # runtime data (agents/sessions JSON, gitignored)
+├─ data/                      # runtime data (SQLite DB, gitignored)
 ├─ workspace/                 # the only directory agents can access (gitignored)
-├─ TECH-DECISION.md           # tech selection research report
+├─ docs/                      # developer documentation (architecture/dev guide/changelog)
 └─ package.json
 ```
 
@@ -254,9 +254,11 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | Skills | **Agent Skills** (SKILL.md) | De-facto standard (Claude Code / Cursor) |
 | Animations | Vue built-in transitions | Zero dependencies |
 
-**Why not LangChain/LangGraph/CrewAI?** See [TECH-DECISION.md](./TECH-DECISION.md) — measured on this machine: LangChain 48.9MB / 5,577 files vs. our agent logic layer at 11.5MB; standard protocols beat framework abstractions.
+**Why not LangChain/LangGraph/CrewAI?** See [docs/TECH-DECISION.md](./docs/TECH-DECISION.md) — measured on this machine: LangChain 48.9MB / 5,577 files vs. our agent logic layer at 11.5MB; standard protocols beat framework abstractions.
 
 **Engineering practices** (CI/CD, PR flow, project management research): see [docs/CICD-RESEARCH.md](./docs/CICD-RESEARCH.md) — trunk-based development, CI quality gates, conventional commits, Kanban/Milestone workflow.
+
+**Documentation**: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) (architecture for beginners) · [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) (zero-to-run guide) · [docs/CHANGELOG.md](./docs/CHANGELOG.md) (human-readable changelog) · [中文文档](./docs/README.zh-CN.md)
 
 ---
 
