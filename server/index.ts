@@ -1,6 +1,7 @@
 // Express 服务器：路由挂载 + 调度器启动 + 健康检查
 import express from 'express'
-import { connectServer, loadMcpConfigs, getHealth } from './mcp.js'
+import { connectServer, loadMcpConfigs, getHealth, saveMcpConfig, deleteMcpConfig, disconnectServer, reconnectServer } from './mcp.js'
+import type { McpServerConfig } from './types.js'
 import {
   listAgents, listSessions, getSession, getAgent, saveSession, resolveApiKey,
   saveProviderKey, providerKeySource, listCustomProviders, upsertCustomProvider, deleteCustomProvider,
@@ -14,6 +15,7 @@ import { chatRouter } from './routes/chat.js'
 import { tasksRouter } from './routes/tasks.js'
 import { uploadsRouter } from './routes/uploads.js'
 import { listModelCatalog, loadModelProviders, invalidateModelProvidersCache } from './models.js'
+import { listMemories, addMemory, updateMemory, deleteMemory } from './memory.js'
 import type { Task } from './types.js'
 
 const app = express()
@@ -50,6 +52,77 @@ app.use('/api/chat', chatRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/uploads', uploadsRouter)
 
+// ---------- MCP 服务器管理（动态增删改，保存即生效） ----------
+
+// 实时状态（连接探测 + 自动重连调度）
+app.get('/api/mcp-servers/status', async (_req, res) => {
+  const statuses = await getHealth()
+  // 合并配置里存在但未连接（或连接失败）的服务器
+  const configs = loadMcpConfigs()
+  const byId = new Map(statuses.map((s) => [s.serverId, s]))
+  const merged = configs.map((c) => byId.get(c.id) ?? {
+    serverId: c.id, name: c.name ?? c.id, connected: false, toolCount: 0,
+  })
+  res.json(merged)
+})
+
+// 添加/更新服务器：保存配置 → 尝试连接（失败不阻塞，状态里可看错误）
+app.post('/api/mcp-servers', async (req, res) => {
+  const body = req.body as { config?: McpServerConfig; upsert?: boolean }
+  const config = body?.config
+  if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config required' })
+  try {
+    const saved = saveMcpConfig(config)
+    // 更新场景先断开旧连接（避免新配置不生效）
+    if (body.upsert) await disconnectServer(saved.id)
+    let status: Record<string, unknown> = { serverId: saved.id, name: saved.name, connected: false, toolCount: 0 }
+    try {
+      const conn = await connectServer(saved)
+      status = { serverId: saved.id, name: saved.name, connected: true, toolCount: conn.tools.length }
+    } catch (err) {
+      status.lastError = (err as Error).message
+    }
+    res.json({ config: saved, status })
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message })
+  }
+})
+
+// 更新（保存 + 重连）
+app.put('/api/mcp-servers/:id', async (req, res) => {
+  const body = req.body as { config?: McpServerConfig }
+  const config = body?.config
+  if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config required' })
+  try {
+    config.id = req.params.id
+    const saved = saveMcpConfig(config)
+    await disconnectServer(saved.id)
+    let status: Record<string, unknown> = { serverId: saved.id, name: saved.name, connected: false, toolCount: 0 }
+    try {
+      const conn = await connectServer(saved)
+      status = { serverId: saved.id, name: saved.name, connected: true, toolCount: conn.tools.length }
+    } catch (err) {
+      status.lastError = (err as Error).message
+    }
+    res.json({ config: saved, status })
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message })
+  }
+})
+
+// 重连
+app.post('/api/mcp-servers/:id/reconnect', async (req, res) => {
+  res.json(await reconnectServer(req.params.id))
+})
+
+// 删除：断开连接 + 删配置文件
+app.delete('/api/mcp-servers/:id', async (req, res) => {
+  await disconnectServer(req.params.id)
+  const ok = deleteMcpConfig(req.params.id)
+  if (!ok) return res.status(404).json({ error: 'server not found' })
+  res.json({ ok: true })
+})
+
 // ---------- 模型注册表（只读目录） ----------
 app.get('/api/models', (_req, res) => {
   res.json(listModelCatalog())
@@ -60,7 +133,7 @@ app.get('/api/models', (_req, res) => {
 app.get('/api/providers/keys', (_req, res) => {
   const providers = loadModelProviders()
   res.json({
-        providers: Object.fromEntries(
+    providers: Object.fromEntries(
       providers.map((p) => [p.id, { source: providerKeySource(p.id, p.apiKeyEnv) }]),
     ),
   })
@@ -102,6 +175,44 @@ app.delete('/api/providers/custom/:id', (req, res) => {
   const ok = deleteCustomProvider(req.params.id)
   invalidateModelProvidersCache()
   if (!ok) return res.status(404).json({ error: 'provider not found' })
+  res.json({ ok: true })
+})
+
+// ---------- 跨会话记忆（按 Agent 隔离） ----------
+
+app.get('/api/memories', (req, res) => {
+  const agentId = String(req.query.agentId ?? '')
+  if (!agentId) return res.status(400).json({ error: 'agentId required' })
+  res.json(listMemories(agentId))
+})
+
+app.post('/api/memories', (req, res) => {
+  const { agentId, content } = req.body as { agentId?: string; content?: string }
+  if (!agentId || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'agentId (string) and content (string) required' })
+  }
+  try {
+    const result = addMemory(agentId, content, 'manual')
+    res.json({ memory: result.memory, merged: result.merged })
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message })
+  }
+})
+
+// 编辑记忆（UI；同样走长度校验）
+app.put('/api/memories/:id', (req, res) => {
+  const { content } = req.body as { content?: string }
+  if (typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'content (string) required' })
+  }
+  const memory = updateMemory(req.params.id, content)
+  if (!memory) return res.status(400).json({ error: `记忆内容无效或过长（最多 200 字）` })
+  res.json(memory)
+})
+
+app.delete('/api/memories/:id', (req, res) => {
+  const ok = deleteMemory(req.params.id)
+  if (!ok) return res.status(404).json({ error: 'memory not found' })
   res.json({ ok: true })
 })
 

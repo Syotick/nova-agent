@@ -4,7 +4,7 @@ import { api, streamChat, autoTitle } from './api'
 import { translateModelError } from './lib/errors'
 import type {
   Agent, Session, SkillMeta, McpServerConfig, Message, ToolCallRecord, ChatEvent, ModelProvider, Attachment, Task,
-  KeySource, CustomProvider, ReasoningOption, MessageSegment,
+  KeySource, CustomProvider, ReasoningOption, MessageSegment, Memory,
 } from './types'
 
 // 网络请求自动重试（后端启动竞态兜底）
@@ -43,6 +43,7 @@ interface MainState {
   skills: SkillMeta[]
   models: ModelProvider[]
   customProviders: CustomProvider[]
+  memories: Memory[]
   tasks: Task[]
   taskBadge: boolean
 
@@ -75,6 +76,10 @@ interface MainState {
   saveCustomProvider: (p: CustomProvider) => Promise<void>
   deleteCustomProvider: (id: string) => Promise<void>
   refreshModelCatalog: () => Promise<void>
+  loadMemories: (agentId: string) => Promise<void>
+  addMemoryManual: (content: string) => Promise<boolean>
+  updateMemory: (id: string, content: string) => Promise<void>
+  deleteMemory: (id: string) => Promise<void>
   loadSessions: (agentId: string) => Promise<void>
   createAgent: (body: Partial<Agent>) => Promise<Agent>
   updateAgent: (id: string, body: Partial<Agent>) => Promise<Agent>
@@ -103,6 +108,7 @@ export const useMainStore = create<MainState>()((set, get) => ({
   skills: [],
   models: [],
   customProviders: [],
+  memories: [],
   tasks: [],
   taskBadge: false,
   streaming: false,
@@ -197,6 +203,34 @@ export const useMainStore = create<MainState>()((set, get) => ({
     set({ models, customProviders, providerKeyStatus: toKeyStatusMap(providerKeys.providers) })
   },
 
+  async loadMemories(agentId: string) {
+    if (!agentId) { set({ memories: [] }); return }
+    try {
+      const memories = await api.listMemories(agentId)
+      set({ memories })
+    } catch {
+      set({ memories: [] })
+    }
+  },
+
+  async addMemoryManual(content: string): Promise<boolean> {
+    const agentId = get().currentAgentId
+    if (!agentId || !content.trim()) return false
+    const res = await api.addMemory(agentId, content.trim())
+    await get().loadMemories(agentId)
+    return res.merged
+  },
+
+  async updateMemory(id: string, content: string) {
+    await api.updateMemory(id, content)
+    set({ memories: get().memories.map((m) => (m.id === id ? { ...m, content } : m)) })
+  },
+
+  async deleteMemory(id: string) {
+    await api.deleteMemory(id)
+    set({ memories: get().memories.filter((m) => m.id !== id) })
+  },
+
   async loadSessions(agentId: string) {
     const sessions = await api.listSessions(agentId)
     set({
@@ -206,6 +240,7 @@ export const useMainStore = create<MainState>()((set, get) => ({
       currentText: '',
       currentToolCalls: [],
     })
+    void get().loadMemories(agentId)
   },
 
   async createAgent(body: Partial<Agent>): Promise<Agent> {

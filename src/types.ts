@@ -125,6 +125,15 @@ export interface Task {
   createdAt: number
 }
 
+/** 跨会话记忆（按 Agent 隔离） */
+export interface Memory {
+  id: string
+  agentId: string
+  content: string
+  source: 'auto' | 'manual'
+  createdAt: number
+}
+
 export type ChatEvent =
   | { type: 'text'; sessionId: string; delta: string }
   | { type: 'tool_call_start'; sessionId: string; call: ToolCallRecord }

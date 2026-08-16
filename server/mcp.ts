@@ -1,5 +1,5 @@
 // MCP 客户端管理：用官方 SDK 拉起多个 MCP server（stdio 子进程）+ 健康检查/自动重连
-import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -50,6 +50,62 @@ export function loadMcpConfigs(): McpServerConfig[] {
       }
     })
     .filter((c) => c.command)
+}
+
+// ---------- MCP 配置动态管理（管理页 CRUD，保存后即时生效无需重启） ----------
+
+const MCP_DIR = join(process.cwd(), 'mcp-servers')
+
+// 保存/更新配置（写 mcp-servers/{id}.json）；id 安全字符校验 + command 必填
+export function saveMcpConfig(config: McpServerConfig): McpServerConfig {
+  const id = (config.id ?? '').trim()
+  if (!/^[\w-]+$/.test(id)) throw new Error('id 只能包含字母、数字、下划线、连字符')
+  if (!config.command?.trim()) throw new Error('command 必填（如 npx）')
+  const clean: McpServerConfig = {
+    id,
+    name: config.name?.trim() || id,
+    command: config.command.trim(),
+    args: Array.isArray(config.args) ? config.args.map((a) => String(a)) : [],
+    env: config.env && Object.keys(config.env).length ? config.env : undefined,
+    timeoutMs: Number(config.timeoutMs) > 0 ? Number(config.timeoutMs) : undefined,
+  }
+  mkdirSync(MCP_DIR, { recursive: true })
+  writeFileSync(join(MCP_DIR, `${id}.json`), JSON.stringify(clean, null, 2), 'utf8')
+  return clean
+}
+
+// 删除配置（删文件 + 断开连接 + 清重连定时器）
+export function deleteMcpConfig(id: string): boolean {
+  const file = join(MCP_DIR, `${id}.json`)
+  if (!existsSync(file)) return false
+  rmSync(file, { force: true })
+  return true
+}
+
+// 断开连接（管理页删除/更新前调用；同时清理重连定时器）
+export async function disconnectServer(serverId: string) {
+  const timer = reconnectTimers.get(serverId)
+  if (timer) { clearTimeout(timer); reconnectTimers.delete(serverId) }
+  const conn = connections.get(serverId)
+  if (conn) {
+    try { await conn.transport.close() } catch { /* ignore */ }
+    try { await conn.client.close() } catch { /* ignore */ }
+    connections.delete(serverId)
+  }
+}
+
+// 重连（管理页"重连"按钮：断开后重新 establish）
+export async function reconnectServer(serverId: string): Promise<McpConnectionStatus> {
+  await disconnectServer(serverId)
+  const config = loadMcpConfigs().find((c) => c.id === serverId)
+  if (!config) return { serverId, name: serverId, connected: false, toolCount: 0, lastError: 'config not found' }
+  try {
+    await connectServer(config)
+    const conn = connections.get(serverId)!
+    return { serverId, name: config.name ?? serverId, connected: true, toolCount: conn.tools.length }
+  } catch (err) {
+    return { serverId, name: config.name ?? serverId, connected: false, toolCount: 0, lastError: (err as Error).message }
+  }
 }
 
 // 自动重连配置
