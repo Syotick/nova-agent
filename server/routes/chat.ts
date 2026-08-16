@@ -1,6 +1,6 @@
 // 聊天路由：SSE 流式对话 + 中断
 import express from 'express'
-import type { ChatEvent } from '../types.js'
+import type { ChatEvent, Attachment, ReasoningOption } from '../types.js'
 import { getSession, getAgent, saveSession } from '../store.js'
 import { runTurn, abortRun } from '../agentLoop.js'
 
@@ -18,7 +18,12 @@ function sse(res: express.Response) {
 }
 
 chatRouter.post('/', async (req, res) => {
-  const { sessionId, text } = req.body as { sessionId?: string; text?: string }
+  const { sessionId, text, attachments, reasoning } = req.body as {
+    sessionId?: string
+    text?: string
+    attachments?: Attachment[]
+    reasoning?: ReasoningOption
+  }
   if (!sessionId || !text) {
     return res.status(400).json({ error: 'sessionId and text required' })
   }
@@ -36,11 +41,11 @@ chatRouter.post('/', async (req, res) => {
   })
 
   try {
-    await runTurn(session, agent, text, emit)
+    await runTurn(session, agent, text, emit, attachments, reasoning)
     saveSession(session) // 检查点：完整 turn 落盘
   } catch (err) {
     const msg = (err as Error).message ?? String(err)
-    emit({ type: 'error', message: msg })
+    emit({ type: 'error', sessionId: session.id, message: msg })
   } finally {
     res.end()
   }

@@ -2,11 +2,11 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 
-const md = new MarkdownIt({
+const md: MarkdownIt = new MarkdownIt({
   html: false,            // 不渲染原始 HTML（防 XSS）
   linkify: true,          // 自动识别 URL
   breaks: true,           // 单换行转 <br>（聊天场景友好）
-  highlight(str, lang) {
+  highlight(str: string, lang: string): string {
     if (lang && hljs.getLanguage(lang)) {
       try {
         return `<pre class="hljs"><code data-lang="${md.utils.escapeHtml(lang)}">${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`

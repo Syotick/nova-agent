@@ -2,8 +2,16 @@
 import express from 'express'
 import type { Agent } from '../types.js'
 import { listAgents, getAgent, saveAgent, deleteAgent, listSessions, deleteSession, newId } from '../store.js'
+import { loadModelProviders } from '../models.js'
 
 export const agentsRouter = express.Router()
+
+// 默认模型标识（models.json 第一个模型；无配置时退回裸名）
+function defaultModel(): string {
+  const p = loadModelProviders()[0]
+  if (p && p.models.length) return `${p.id}/${p.models[0].id}`
+  return 'deepseek-v4-flash'
+}
 
 agentsRouter.get('/', (_req, res) => {
   res.json(listAgents())
@@ -15,7 +23,7 @@ agentsRouter.post('/', (req, res) => {
     id: newId('agent'),
     name: body.name?.trim() || '新 Agent',
     persona: body.persona?.trim() || 'You are a helpful assistant.',
-    model: body.model?.trim() || 'deepseek-v4-flash',
+    model: body.model?.trim() || defaultModel(),
     mcpServerIds: body.mcpServerIds ?? [],
     skillIds: body.skillIds ?? [],
     color: body.color ?? '#4d6bfe',
