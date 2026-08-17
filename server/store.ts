@@ -226,6 +226,20 @@ export function deleteSession(id: string) {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
 }
 
+// ---------- 通用 config 键值（SQLite config 表） ----------
+export function getConfigValue(key: string): string | null {
+  const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setConfigValue(key: string, value: string) {
+  db.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+}
+
+export function deleteConfigValue(key: string) {
+  db.prepare('DELETE FROM config WHERE key = ?').run(key)
+}
+
 export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }

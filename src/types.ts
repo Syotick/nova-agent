@@ -132,6 +132,20 @@ export interface Task {
   createdAt: number
 }
 
+/** 工作区（Agent 文件权限边界，filesystem MCP 挂载根） */
+export interface WorkspaceInfo {
+  /** 用户配置的原始值（null = 默认 workspace/） */
+  configured: string | null
+  /** 解析后的绝对路径 */
+  resolved: string
+  /** 目录当前是否存在 */
+  exists: boolean
+  /** 是否为默认（未自定义） */
+  isDefault: boolean
+  /** 保存后面临的重连结果（仅 PUT 响应携带；挂载工作区的 MCP server） */
+  reconnected?: Array<{ serverId: string; ok: boolean; error?: string }>
+}
+
 /** 跨会话记忆（按 Agent 隔离） */
 export interface Memory {
   id: string

@@ -1,16 +1,20 @@
-// 附件上传路由：文件存 workspace/uploads/（Agent 经 filesystem 工具可读）
-// ⚠️ 目录必须与 mcp-servers/filesystem.json 的根目录保持一致（项目内 workspace/）
+// 附件上传路由：文件存 <工作区>/uploads/（Agent 经 filesystem 工具可读）
+// 工作区 = 设置页可配置（默认项目内 workspace/）；filesystem 用 {{workspace}} 占位符自动跟随，无需手动保持一致
 import express from 'express'
 import multer from 'multer'
 import { mkdirSync, existsSync, createReadStream, statSync, rmSync, readdirSync } from 'node:fs'
 import { join, resolve, extname } from 'node:path'
 import type { Attachment } from '../types.js'
+import { getWorkspacePath } from '../workspace.js'
 
 export const uploadsRouter = express.Router()
 
-const WORKSPACE = join(process.cwd(), 'workspace')
-const UPLOAD_DIR = join(WORKSPACE, 'uploads')
-mkdirSync(UPLOAD_DIR, { recursive: true })
+// 实时取工作区：用户改配置后无需重启即生效
+function getUploadDir(): string {
+  const dir = join(getWorkspacePath(), 'uploads')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 // 限制：单文件 50MB
 const MAX_SIZE = 50 * 1024 * 1024
@@ -47,7 +51,7 @@ const MIME_WHITELIST: Record<string, string> = {
 const DANGEROUS_EXT = ['.html', '.htm', '.js', '.mjs', '.cjs', '.css', '.xml', '.wasm', '.sh', '.bat', '.cmd', '.ps1', '.php', '.jsp', '.svgz']
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (_req, _file, cb) => cb(null, getUploadDir()),
   filename: (_req, file, cb) => {
     const safe = file.originalname.replace(/[^\w\u4e00-\u9fa5.-]+/g, '_').slice(0, 80)
     cb(null, `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}-${safe}`)
@@ -62,10 +66,11 @@ const upload = multer({
 // 磁盘占用统计（防 DoS 用）
 function diskUsage(): { count: number; bytes: number } {
   try {
-    const entries = readdirSync(UPLOAD_DIR)
+    const dir = getUploadDir()
+    const entries = readdirSync(dir)
     let bytes = 0
     for (const f of entries) {
-      try { bytes += statSync(join(UPLOAD_DIR, f)).size } catch { /* 忽略 */ }
+      try { bytes += statSync(join(dir, f)).size } catch { /* 忽略 */ }
     }
     return { count: entries.length, bytes }
   } catch {
@@ -100,8 +105,8 @@ uploadsRouter.get('/:filename', (req, res) => {
   if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid filename' })
   }
-  const filePath = resolve(UPLOAD_DIR, filename)
-  if (!filePath.startsWith(UPLOAD_DIR) || !existsSync(filePath)) {
+  const filePath = resolve(getUploadDir(), filename)
+  if (!filePath.startsWith(getUploadDir()) || !existsSync(filePath)) {
     return res.status(404).json({ error: 'file not found' })
   }
   const st = statSync(filePath)
@@ -126,8 +131,8 @@ uploadsRouter.delete('/:filename', (req, res) => {
   if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid filename' })
   }
-  const filePath = resolve(UPLOAD_DIR, filename)
-  if (!filePath.startsWith(UPLOAD_DIR)) {
+  const filePath = resolve(getUploadDir(), filename)
+  if (!filePath.startsWith(getUploadDir())) {
     return res.status(400).json({ error: 'invalid filename' })
   }
   if (!existsSync(filePath)) return res.status(404).json({ error: 'file not found' })
@@ -137,5 +142,5 @@ uploadsRouter.delete('/:filename', (req, res) => {
 
 // 磁盘占用（供前端/调试）
 uploadsRouter.get('/', (_req, res) => {
-  res.json({ dir: UPLOAD_DIR, ...diskUsage() })
+  res.json({ dir: getUploadDir(), ...diskUsage() })
 })

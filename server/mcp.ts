@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpServerConfig } from './types.js'
+import { resolveMcpArgs } from './workspace.js'
 
 export interface McpTool {
   serverId: string
@@ -124,7 +125,8 @@ async function establish(config: McpServerConfig): Promise<McpConnection> {
   )
   const transport = new StdioClientTransport({
     command: config.command,
-    args: config.args,
+    // {{workspace}} 占位符 → 当前工作区；./ ../ 相对路径 → 项目根（见 workspace.ts）
+    args: resolveMcpArgs(config.args ?? []),
     env: envFor(config),
     stderr: 'pipe',
   })
