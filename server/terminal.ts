@@ -2,6 +2,7 @@
 // 进程生命周期：会话级注册表 + 整树清理（中断/超时/结束时兜底），防幽灵进程占端口
 import { spawn, type ChildProcess } from 'node:child_process'
 import { resolve, sep } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import { getWorkspacePath } from './workspace.js'
 
 export interface RunCommandArgs {
@@ -96,6 +97,9 @@ export async function executeCommand(sessionId: string, args: RunCommandArgs): P
   const timeout = Math.min(Math.max(args.timeoutMs ?? DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS)
   const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
   const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-c', command]
+
+  // 确保目标目录存在（shell 无法在不存在目录启动；工作区/子目录可能尚未创建，如全新 clone 的 CI 环境）
+  mkdirSync(cwd, { recursive: true })
 
   // Windows 下必须 verbatim：Node 默认会重写含引号参数的引号，与 cmd /c 的解析叠加会破坏命令
   // （如 node -e "..." 会把内层引号搅乱导致命令无输出/报错）
