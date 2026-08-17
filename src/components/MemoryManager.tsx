@@ -103,7 +103,7 @@ export default function MemoryManager() {
         <div className="flex flex-col gap-2">
           {memories.map((m) => (
             <div key={m.id} className="flex items-start gap-2.5 rounded-2xl border border-border bg-card/50 px-4 py-3">
-              <span className="mt-0.5 text-sm">💡</span>
+              <Brain className="mt-0.5 h-4 w-4 flex-none text-primary/70" />
               <div className="flex min-w-0 flex-1 flex-col gap-1 leading-tight">
                 {editingId === m.id ? (
                   <div className="flex items-start gap-1.5">

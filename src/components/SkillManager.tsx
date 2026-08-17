@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Plus, Pencil, Trash2, Search, Download, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Download, Upload, Sparkles, BookOpen } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { Button } from './ui/button'
@@ -111,7 +111,9 @@ export default function SkillManager() {
       <div className="mx-auto max-w-[860px]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">
-            <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl text-xl">📚</div>
+            <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
             <div>
               <h3 className="text-[17px] font-bold">技能管理</h3>
               <p className="mt-0.5 max-w-[560px] text-[13px] leading-relaxed text-muted-foreground">
@@ -141,7 +143,7 @@ export default function SkillManager() {
           {filtered.map((skill) => (
             <Card key={skill.id}>
               <CardHeader className="flex-row items-center gap-2.5">
-                <span className="text-lg">📖</span>
+                <BookOpen className="h-4 w-4 text-primary/70" />
                 <CardTitle className="text-sm">{skill.name}</CardTitle>
                 <span className="font-mono text-xs text-muted-foreground">/{skill.id}</span>
               </CardHeader>

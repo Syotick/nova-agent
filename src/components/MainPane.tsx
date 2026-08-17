@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { Cpu, Brain, Cable, Sparkles, Clock, Wrench } from 'lucide-react'
 import { useMainStore } from '../store'
 import ChatView from './ChatView'
 import TrajectoryView from './TrajectoryView'
@@ -37,13 +39,13 @@ export default function MainPane({ view }: Props) {
   const hasSessionTokens = sessionTokens.input > 0 || sessionTokens.output > 0
 
   const isChatView = view === 'chat' || view === 'trajectory'
-  const headerMeta: Record<string, { icon: string; title: string; sub: string }> = {
-    models: { icon: '🧠', title: '模型渠道', sub: 'Model Providers' },
-    memories: { icon: '🧠', title: '记忆', sub: 'Memories' },
-    mcps: { icon: '🔌', title: 'MCP 服务器', sub: 'MCP Servers' },
-    skills: { icon: '📚', title: '技能管理', sub: 'Skills' },
-    tasks: { icon: '⏱️', title: '定时任务', sub: 'Tasks' },
-    tools: { icon: '🧰', title: '工具浏览', sub: 'Tools' },
+  const headerMeta: Record<string, { icon: ReactNode; title: string; sub: string }> = {
+    models: { icon: <Cpu className="h-5 w-5 text-primary" />, title: '模型渠道', sub: 'Model Providers' },
+    memories: { icon: <Brain className="h-5 w-5 text-primary" />, title: '记忆', sub: 'Memories' },
+    mcps: { icon: <Cable className="h-5 w-5 text-primary" />, title: 'MCP 服务器', sub: 'MCP Servers' },
+    skills: { icon: <Sparkles className="h-5 w-5 text-primary" />, title: '技能管理', sub: 'Skills' },
+    tasks: { icon: <Clock className="h-5 w-5 text-primary" />, title: '定时任务', sub: 'Tasks' },
+    tools: { icon: <Wrench className="h-5 w-5 text-primary" />, title: '工具浏览', sub: 'Tools' },
   }
   const meta = headerMeta[view]
 
@@ -77,7 +79,7 @@ export default function MainPane({ view }: Props) {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="text-xl">{meta?.icon}</span>
+            {meta?.icon}
             <div className="flex flex-col leading-tight">
               <span className="text-[15px] font-semibold">{meta?.title}</span>
               <span className="font-mono text-[11px] tracking-wide text-muted-foreground">{meta?.sub}</span>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings, Brain, Cable,
+  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings, Brain, Cable, X,
 } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
@@ -209,7 +209,9 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
             className="h-8 min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           {searchQ && (
-            <button className="text-[10px] text-muted-foreground hover:text-foreground" onClick={() => { setSearchQ(''); setSearchFocus(false) }}>✕</button>
+            <button className="text-muted-foreground hover:text-foreground" onClick={() => { setSearchQ(''); setSearchFocus(false) }} title="清除">
+              <X className="h-3 w-3" />
+            </button>
           )}
         </div>
 

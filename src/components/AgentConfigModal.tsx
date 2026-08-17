@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useMainStore } from '../store'
 import { Button } from './ui/button'
 import { Input, Textarea } from './ui/input'
@@ -152,8 +153,9 @@ export default function AgentConfigModal({ visible, editingAgent, onClose }: Pro
               <p className="text-[11px] text-muted-foreground">服务地址：<code className="rounded bg-primary/10 px-1 font-mono text-primary">{currentProvider.baseUrl}</code></p>
             )}
             {providerNoKey && (
-              <p className="rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-[11px] text-warning">
-                ⚠️ 该渠道尚未配置 API Key，调用会失败。请先到「模型渠道」页填写 {formProvider} 的 key。
+              <p className="flex items-start gap-1 rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-1.5 text-[11px] text-warning">
+                <AlertTriangle className="mr-1 inline h-3.5 w-3.5 flex-none" />
+                该渠道尚未配置 API Key，调用会失败。请先到「模型渠道」页填写 {formProvider} 的 key。
               </p>
             )}
           </div>
