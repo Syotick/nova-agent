@@ -1,24 +1,27 @@
 import { describe, it, expect } from 'vitest'
+import { join, dirname, isAbsolute } from 'node:path'
 import { resolveWorkspace, resolveMcpArgs, validateWorkspaceRaw } from '../workspace.js'
 
 const cwd = process.cwd()
+const isWin = process.platform === 'win32'
 
 describe('工作区解析', () => {
   it('resolveWorkspace：空/未配置 → 项目根/workspace（兜底）', () => {
-    expect(resolveWorkspace(null)).toBe(`${cwd}\\workspace` || `${cwd}/workspace`)
+    expect(resolveWorkspace(null)).toBe(join(cwd, 'workspace'))
     expect(resolveWorkspace('')).toBe(resolveWorkspace(null))
     expect(resolveWorkspace('   ')).toBe(resolveWorkspace(null))
   })
 
   it('resolveWorkspace：相对路径按项目根解析', () => {
-    const r = resolveWorkspace('my-folder')
-    expect(r).toBe(`${cwd}\\my-folder` || `${cwd}/my-folder`)
-    expect(resolveWorkspace('./sub')).toBe(`${cwd}\\sub` || `${cwd}/sub`)
+    expect(resolveWorkspace('my-folder')).toBe(join(cwd, 'my-folder'))
+    expect(resolveWorkspace('./sub')).toBe(join(cwd, 'sub'))
   })
 
-  it('resolveWorkspace：绝对路径原样保留（仅规范化分隔符）', () => {
-    const abs = resolveWorkspace('D:/some/abs/dir')
-    expect(abs.startsWith('D:')).toBe(true)
+  it('resolveWorkspace：绝对路径保留（仅规范化）', () => {
+    // 平台各自构造一个绝对路径：win 用盘符路径，unix 用根路径
+    const absInput = isWin ? 'D:/some/abs/dir' : '/some/abs/dir'
+    const abs = resolveWorkspace(absInput)
+    expect(isAbsolute(abs)).toBe(true)
     expect(abs).toContain('some')
     expect(abs).toContain('abs')
     expect(abs).toContain('dir')
@@ -34,11 +37,9 @@ describe('工作区解析', () => {
 
   it('resolveMcpArgs：可嵌参数中间 + ./ 相对路径解析 + 普通参数不变（分隔符被规范化）', () => {
     const resolved = resolveMcpArgs(['-p', '{{workspace}}/uploads', './config.json', '--flag'])
-    expect(resolved[1]).toBe(`${resolveWorkspace(null)}\\uploads` || `${resolveWorkspace(null)}/uploads`)
-    expect(resolved[2]).toBe(`${cwd}\\config.json` || `${cwd}/config.json`)
+    expect(resolved[1]).toBe(join(resolveWorkspace(null), 'uploads'))
+    expect(resolved[2]).toBe(join(cwd, 'config.json'))
     expect(resolved[3]).toBe('--flag')
-    // 占位符拼接产生的混合分隔符被 normalize 为单一风格
-    expect(resolved[1]).not.toContain('workspace/')
   })
 
   it('resolveMcpArgs：无占位符/相对路径时原样返回', () => {
@@ -54,21 +55,29 @@ describe('工作区校验（validateWorkspaceRaw）', () => {
 
   it('正常相对/绝对路径合法', () => {
     expect(validateWorkspaceRaw('my-workspace')).toBeNull()
-    expect(validateWorkspaceRaw('D:/some/abs/dir')).toBeNull()
+    const absInput = isWin ? 'D:/some/abs/dir' : '/some/abs/dir'
+    expect(validateWorkspaceRaw(absInput)).toBeNull()
   })
 
   it('拒绝项目根（含大小写变体绕过）', () => {
     expect(validateWorkspaceRaw('./')).not.toBeNull()
     expect(validateWorkspaceRaw(cwd)).not.toBeNull()
-    // 小写盘符/大小写混写：解析后与项目根同一目录，必须拒绝
-    const lowerVariant = cwd.replace(/^[A-Z]:/, (m) => m.toLowerCase())
-    expect(validateWorkspaceRaw(lowerVariant)).not.toBeNull()
+    // 盘符大小写变体：仅 Windows 有盘符概念
+    if (isWin) {
+      const lowerVariant = cwd.replace(/^[A-Z]:/, (m) => m.toLowerCase())
+      expect(validateWorkspaceRaw(lowerVariant)).not.toBeNull()
+    }
   })
 
   it('拒绝项目上级目录（API key 文件所在区域）及其祖先', () => {
+    // 任何平台：项目直接上级 = 密钥文件所在目录，必须拒绝
     expect(validateWorkspaceRaw('..')).not.toBeNull()
+    // 更深祖先的边界含义依赖平台布局（Windows 上密钥在项目上级；unix 同理），两平台都验证
     expect(validateWorkspaceRaw('../..')).not.toBeNull()
-    expect(validateWorkspaceRaw('..\\..')).not.toBeNull()
+    // Windows 反斜杠写法仅在 Windows 有效
+    if (isWin) {
+      expect(validateWorkspaceRaw('..\\..')).not.toBeNull()
+    }
   })
 
   it('拒绝 NUL 与超长路径', () => {
