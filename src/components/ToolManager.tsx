@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Wrench, Cable } from 'lucide-react'
 import { api } from '../api'
 import { Card } from './ui/card'
 import { cn } from '../lib/utils'
@@ -24,7 +24,9 @@ export default function ToolManager() {
     <div className="h-full overflow-y-auto px-8 py-7">
       <div className="mx-auto max-w-[860px]">
         <div className="mb-5 flex items-start gap-3.5">
-          <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl text-xl">🧰</div>
+          <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl">
+            <Wrench className="h-5 w-5 text-primary" />
+          </div>
           <div>
             <h3 className="text-[17px] font-bold">工具浏览</h3>
             <p className="mt-0.5 text-[13px] text-muted-foreground">所有 MCP 工具按服务器分组展示，共 {tools.length} 个工具</p>
@@ -37,7 +39,7 @@ export default function ToolManager() {
               className="flex w-full items-center gap-2.5 px-4 py-3 text-left"
               onClick={() => setOpenServer(openServer === serverName ? null : serverName)}
             >
-              <span className="text-base">🔌</span>
+              <Cable className="h-4 w-4 text-primary/70" />
               <span className="text-sm font-semibold">{serverName}</span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{list.length} 工具</span>
               <ChevronDown className={cn('ml-auto h-4 w-4 text-muted-foreground transition-transform', openServer === serverName && 'rotate-180')} />

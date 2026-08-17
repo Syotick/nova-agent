@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMainStore } from '../store'
+import { Paperclip, Bot } from 'lucide-react'
 import ToolCallCard from './ToolCallCard'
 import { renderMarkdown, renderStreaming } from '../markdown'
 import { cn, fmtSize, fmtTokens } from '../lib/utils'
@@ -93,7 +94,7 @@ export default function MessageList() {
               </a>
             ) : (
               <a key={att.id} href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-1.5 text-xs transition-colors hover:border-primary/50">
-                <span>📎</span>
+                <Paperclip className="h-3.5 w-3.5 flex-none text-muted-foreground" />
                 <span className="max-w-[160px] truncate">{att.name}</span>
                 <span className="text-[11px] text-muted-foreground">{fmtSize(att.size)}</span>
               </a>
@@ -135,7 +136,7 @@ export default function MessageList() {
           <div key={msg.id} data-mid={msg.id} className={cn('flex gap-3 rounded-xl transition-colors', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
             {msg.role === 'assistant' && (
               <div className="mt-0.5 flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[10px] border border-border bg-muted shadow-[0_2px_10px_rgba(0,0,0,0.25)]">
-                <span className="text-sm">✨</span>
+                <Bot className="h-4 w-4 text-primary" />
               </div>
             )}
             {renderBubble(msg)}
@@ -146,7 +147,7 @@ export default function MessageList() {
         {(streaming || currentText || currentToolCalls.length > 0 || currentSegments.length > 0) && (
           <div className="flex gap-3 animate-fade-in-up">
             <div className="mt-0.5 flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[10px] border border-border bg-muted">
-              <span className="text-sm">✨</span>
+              <Bot className="h-4 w-4 text-primary" />
             </div>
             <div className="glass max-w-[82%] rounded-2xl rounded-bl-md border border-primary/35 px-4 py-3 text-sm leading-relaxed shadow-glow">
               {currentSegments.length > 0 ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Play, Pause, PlayCircle } from 'lucide-react'
+import { Plus, Trash2, Play, Clock, Pause, PlayCircle, Pencil } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { Button } from './ui/button'
@@ -76,7 +76,9 @@ export default function TaskManager() {
       <div className="mx-auto max-w-[860px]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">
-            <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl text-xl">⏱️</div>
+            <div className="gradient-brand-soft flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl">
+              <Clock className="h-5 w-5 text-primary" />
+            </div>
             <div>
               <h3 className="text-[17px] font-bold">定时任务</h3>
               <p className="mt-0.5 max-w-[560px] text-[13px] leading-relaxed text-muted-foreground">

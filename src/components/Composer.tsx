@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { Paperclip, Send, Square, Brain } from 'lucide-react'
+import { Paperclip, Send, Square, Brain, Image, X } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { cn, fmtSize } from '../lib/utils'
 import type { Attachment, ReasoningOption } from '../types'
 import ModelPicker from './ModelPicker'
+import ContextUsageBar from './ContextUsageBar'
 
 // 思考模式基础选项（所有 DeepSeek 模型都有）：thinking 开关，纯英文
 const BASE_REASONING: Array<{ value: string; label: string; option: ReasoningOption }> = [
@@ -108,7 +109,7 @@ export default function Composer() {
           <div className="flex flex-wrap gap-2">
             {attachments.map((a, i) => (
               <div key={a.id} className="flex items-center gap-1.5 rounded-xl border border-border bg-muted px-2.5 py-1.5 text-xs animate-fade-in-up" title={a.name}>
-                <span>{isImage(a) ? '🖼️' : '📎'}</span>
+                {isImage(a) ? <Image className="h-3.5 w-3.5 text-primary" /> : <Paperclip className="h-3.5 w-3.5 text-primary" />}
                 <span className="max-w-[150px] truncate">{a.name}</span>
                 <span className="text-[11px] text-muted-foreground">{fmtSize(a.size)}</span>
                 <button
@@ -119,7 +120,7 @@ export default function Composer() {
                     // 同步删除磁盘文件（防磁盘 DoS，删除失败静默忽略）
                     void api.deleteFile(att.path.split('/').pop() ?? '').catch(() => {})
                   }}
-                >✕</button>
+                ><X className="h-3 w-3" /></button>
               </div>
             ))}
           </div>
@@ -128,6 +129,7 @@ export default function Composer() {
         {/* 工具栏：模型切换 + 思考程度（输入框上方，与同类产品一致） */}
         <div className="flex items-center gap-2 px-1">
           <ModelPicker />
+          <ContextUsageBar />
           <div
             className={cn(
               'flex items-center gap-1 rounded-lg border border-border bg-input px-2 py-1',
