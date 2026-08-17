@@ -1,5 +1,5 @@
 // API 封装：REST + SSE 流式聊天
-import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo, Task, ModelProvider, Attachment, KeySource, CustomProvider, ReasoningOption, Memory } from './types'
+import type { Agent, Session, SkillMeta, McpServerConfig, ChatEvent, Message, ToolInfo, Task, ModelProvider, Attachment, KeySource, CustomProvider, ReasoningOption, Memory, WorkspaceInfo } from './types'
 
 const BASE = '/api'
 
@@ -83,6 +83,11 @@ export const api = {
     json<Task>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   runTask: (id: string) => json<{ ok: boolean; result: string }>(`/tasks/${id}/run`, { method: 'POST' }),
   deleteTask: (id: string) => json<{ ok: boolean }>(`/tasks/${id}`, { method: 'DELETE' }),
+
+  // 工作区（Agent 文件权限边界；相对路径按项目根解析）
+  getWorkspace: () => json<WorkspaceInfo>('/workspace'),
+  setWorkspace: (path: string) =>
+    json<WorkspaceInfo>('/workspace', { method: 'PUT', body: JSON.stringify({ path }) }),
 
   // 多渠道 API key（状态不返回明文）
   getProviderKeys: () =>

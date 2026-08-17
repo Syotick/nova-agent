@@ -4,7 +4,7 @@ import { api, streamChat, autoTitle } from './api'
 import { translateModelError } from './lib/errors'
 import type {
   Agent, Session, SkillMeta, McpServerConfig, Message, ToolCallRecord, ChatEvent, ModelProvider, Attachment, Task,
-  KeySource, CustomProvider, ReasoningOption, MessageSegment, Memory,
+  KeySource, CustomProvider, ReasoningOption, MessageSegment, Memory, WorkspaceInfo,
 } from './types'
 
 // 网络请求自动重试（后端启动竞态兜底）
@@ -61,6 +61,7 @@ interface MainState {
   providerKeyStatus: Record<string, KeySource> // providerId → key 状态
   reasoningPref: ReasoningOption // 思考模式偏好（输入框旁切换，localStorage 持久化）
   initialized: boolean // init 幂等标志（StrictMode 防重复）
+  workspace: WorkspaceInfo | null // 工作区（Agent 文件权限边界）
 
   // getters
   currentAgent: () => Agent | undefined
@@ -94,6 +95,8 @@ interface MainState {
   send: (text: string, attachments?: Attachment[]) => Promise<void>
   requestNotifyPermission: () => Promise<void>
   clearTaskBadge: () => void
+  loadWorkspace: () => Promise<void>
+  saveWorkspace: (path: string) => Promise<string | null>
 }
 
 let taskPollTimer: ReturnType<typeof setInterval> | null = null
@@ -122,6 +125,7 @@ export const useMainStore = create<MainState>()((set, get) => ({
   providerKeyStatus: {},
   reasoningPref: { type: 'adaptive' },
   initialized: false,
+  workspace: null,
 
   currentAgent: () => get().agents.find((a) => a.id === get().currentAgentId),
   currentSession: () => get().sessions.find((s) => s.id === get().currentSessionId),
@@ -161,6 +165,7 @@ export const useMainStore = create<MainState>()((set, get) => ({
         customProviders,
         providerKeyStatus: toKeyStatusMap(providerKeys.providers),
         reasoningPref: loadReasoningPref(),
+        workspace: await api.getWorkspace(),
       })
       if (!agents.length) {
         await get().createAgent({ name: '默认助手', persona: 'You are a helpful assistant. 用中文回答。', model: get().defaultModelId() })
@@ -405,6 +410,20 @@ export const useMainStore = create<MainState>()((set, get) => ({
 
   clearTaskBadge() {
     set({ taskBadge: false })
+  },
+
+  async loadWorkspace() {
+    set({ workspace: await api.getWorkspace() })
+  },
+
+  // 保存工作区；返回错误信息（null = 成功）。后端会自动重连挂载工作区的 MCP server
+  async saveWorkspace(path: string) {
+    try {
+      set({ workspace: await api.setWorkspace(path) })
+      return null
+    } catch (err) {
+      return (err as Error).message
+    }
   },
 }))
 

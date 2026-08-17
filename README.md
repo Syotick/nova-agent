@@ -1,6 +1,6 @@
 # ✨ Nova Agent
 
-**Nova Agent** is a lightweight, self-contained open-source AI agent — a minimal, fully functional alternative to Claude Code. Built with **Vue 2.7 + Express + Vercel AI SDK + MCP + Agent Skills**.
+**Nova Agent** is a lightweight, self-contained open-source AI agent — a minimal, fully functional alternative to Claude Code. Built with **React 19 + TypeScript + Express + Vercel AI SDK + MCP + Agent Skills**.
 
 > Compact by design, complete by default: agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, and sandboxed security — all included and extensible.
 
@@ -42,7 +42,7 @@
 - ✅ Run-on-demand, enable/pause/delete from the UI
 
 ### Security
-- ✅ **Workspace isolation**: agents can only access `workspace/` — project code and API keys are unreachable
+- ✅ **Workspace isolation**: agents can only access the configurable workspace (default `workspace/`) — project code and API keys are unreachable
 - ✅ **External key storage**: API key lives outside the project (`.nova-agent-key.json`)
 - ✅ Custom confirmation dialogs (delete protection)
 - ✅ Raw HTML disabled in Markdown rendering (XSS-safe)
@@ -58,13 +58,13 @@
 ## 🏗️ Architecture
 
 ```
-┌────────────── Browser (Vue 2.7) ──────────────┐
+┌───────────── Browser (React 19) ──────────────┐
 │  Sidebar (Agents/Sessions/Nav) → MainPane     │
 │    ├─ ChatView (messages + tool cards + input) │
 │    ├─ TrajectoryView (step timeline)           │
 │    ├─ SkillManager (visual skill editing)      │
 │    └─ ToolManager (tool browser)               │
-│  Pinia store → api.ts (REST + SSE)             │
+│  Zustand store → api.ts (REST + SSE)           │
 └───────────────────┬───────────────────────────┘
                     │ fetch /api/* (SSE stream)
 ┌───────────────────▼───────────────────────────┐
@@ -122,11 +122,16 @@ nova-agent/
 │  ├─ compact.ts              # context compaction (LLM summarization)
 │  ├─ mcp.ts                  # MCP client management
 │  ├─ skills.ts               # SKILL.md scan/parse/CRUD
+│  ├─ models.ts               # model registry (builtin + custom providers)
+│  ├─ memory.ts               # long-term memory (LRU + dedup merge)
+│  ├─ scheduler.ts            # scheduled tasks (5-field cron)
+│  ├─ db.ts                   # SQLite init (node:sqlite)
+│  ├─ builtinTools.ts         # built-in tools (web_search, memory search…)
 │  ├─ store.ts                # agent/session persistence + API key
 │  └─ types.ts                # shared types
-├─ src/                       # frontend (Vue 2.7 + Pinia)
+├─ src/                       # frontend (React 19 + TS + Zustand)
 │  ├─ components/             # Sidebar/ChatView/Trajectory/SkillManager/ToolManager...
-│  ├─ store.ts                # Pinia store
+│  ├─ store.ts                # Zustand store
 │  ├─ api.ts                  # REST + SSE wrapper
 │  ├─ markdown.ts             # markdown-it + highlight.js
 │  └─ styles.css              # design system (gradient/glass/animations)
@@ -137,7 +142,7 @@ nova-agent/
 │  ├─ filesystem.json
 │  └─ playwright.json
 ├─ data/                      # runtime data (SQLite DB, gitignored)
-├─ workspace/                 # the only directory agents can access (gitignored)
+├─ workspace/                 # default agent workspace (configurable in Settings; gitignored)
 ├─ docs/                      # developer documentation (architecture/dev guide/changelog)
 └─ package.json
 ```
@@ -152,6 +157,17 @@ nova-agent/
 | `NOVA_AGENT_PORT` | `8787` | Backend port |
 | `NOVA_AGENT_COMPACT_MIN` | `40` | Auto-compact trigger: compress when messages exceed this |
 | `NOVA_AGENT_COMPACT_KEEP` | `20` | Messages kept after compaction (earlier ones are summarized) |
+---
+
+## 📂 Workspace (agent file boundary)
+
+By default agents can only touch `workspace/` (inside the project). Like Codex, you can point the workspace at any folder of your choice:
+
+- **Settings → Workspace**: enter a relative path (resolved against the project root) or an absolute path; leave empty to reset to the default `workspace/`. The first run shows a guided picker (skippable); the default `workspace/` always acts as the fallback tool area. Saving auto-reconnects MCP servers that mount the workspace (e.g. `filesystem`) — no restart needed.
+- Uploaded attachments and the **filesystem** MCP server both use this root, so the agent sees exactly the folder you picked.
+- MCP configs can reference it with the `{{workspace}}` placeholder (e.g. `"args": ["node", "server.js", "{{workspace}}/data"]`); args starting with `./` or `../` are resolved against the project root.
+- ⚠️ The workspace *is* the agent's permission boundary. Pointing it at the project root or the API-key directory (both rejected) would grant the agent file access there; pointing it at any other sensitive directory does the same — choose deliberately. Note: switching workspaces makes previously uploaded attachments (stored under the old root) unreachable.
+
 ---
 
 ## 🔧 Extending (no code required)
@@ -190,7 +206,7 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | id | Description |
 |---|---|
 | `playwright` | [@playwright/mcp](https://github.com/microsoft/playwright-mcp): browser automation (open/click/screenshot/read) |
-| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers): file read/write (**workspace/ only**) |
+| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers): file read/write (**workspace root only**, configurable) |
 
 ### Bundled Skills
 
@@ -205,7 +221,7 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 | Layer | Protection |
 |---|---|
-| **Workspace isolation** | filesystem MCP only allows `workspace/`; agents cannot read project code |
+| **Workspace isolation** | filesystem MCP only allows the configured workspace (default `workspace/`); agents cannot read project code |
 | **External key** | API key stored outside the project (`.nova-agent-key.json`), unreachable by agents |
 | **XSS protection** | markdown-it with `html: false`; raw HTML disabled |
 | **Confirm dialogs** | destructive operations require custom confirmation |
@@ -221,7 +237,13 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | POST | `/api/agents` | Create agent |
 | PUT/DELETE | `/api/agents/:id` | Update/delete agent (cascades sessions) |
 | GET | `/api/mcp-servers` | List MCP servers |
+| GET | `/api/mcp-servers/status` | MCP server health status |
+| POST/PUT/DELETE | `/api/mcp-servers/:id` | Add/update/delete MCP server (live, no restart) |
+| POST | `/api/mcp-servers/:id/reconnect` | Reconnect an MCP server |
 | GET | `/api/tools` | All tools + schemas |
+| GET | `/api/models` | Model catalog (builtin + custom providers) |
+| GET/POST | `/api/providers/keys` | Per-provider API key status/save |
+| GET/POST/DELETE | `/api/providers/custom` | Custom provider CRUD |
 | GET/POST/DELETE | `/api/skills` | Skill CRUD |
 | GET/POST | `/api/sessions` | List/create sessions |
 | PUT/DELETE | `/api/sessions/:id` | Rename/delete session |
@@ -231,7 +253,8 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | POST | `/api/tasks/:id/run` | Run a task on demand |
 | **POST** | **`/api/chat`** | **SSE streaming chat (core)** |
 | POST | `/api/chat/stop` | Abort current run |
-| GET/POST | `/api/config` | API key status/save |
+| GET/POST/PUT/DELETE | `/api/memories` | Long-term memory CRUD |
+| GET | `/api/health` | Health check |
 
 ---
 
@@ -239,12 +262,12 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend | Vue 2.7 + Pinia + Vite | Mature ecosystem, minimal footprint |
+| Frontend | React 19 + TypeScript + Vite | Type-safe, rich component ecosystem |
 | Backend | Express | One-file simple routing |
 | LLM | Vercel AI SDK + `@ai-sdk/deepseek` | Thin wrapper, framework-agnostic |
 | Tools | **MCP protocol** | Industry standard ("USB-C for AI") |
 | Skills | **Agent Skills** (SKILL.md) | De-facto standard (Claude Code / Cursor) |
-| Animations | Vue built-in transitions | Zero dependencies |
+| Animations | CSS keyframes (styles.css) | Zero dependencies |
 
 **Documentation**: [中文文档](./docs/README.zh-CN.md)
 

@@ -1,6 +1,6 @@
 # ✨ Nova Agent（新星 Agent）
 
-**Nova Agent** 是一个轻量、开箱即用的开源 AI Agent 应用 —— Claude Code 的极简替代实现。技术栈：**Vue 2.7 + Express + Vercel AI SDK + MCP + Agent Skills**。
+**Nova Agent** 是一个轻量、开箱即用的开源 AI Agent 应用 —— Claude Code 的极简替代实现。技术栈：**React 19 + TypeScript + Express + Vercel AI SDK + MCP + Agent Skills**。
 
 > 小巧但完整：Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离 —— 全部具备且可扩展。
 
@@ -42,7 +42,7 @@
 - ✅ 支持手动立即执行、暂停/启用/删除
 
 ### 安全
-- ✅ **工作区隔离**：Agent 只能访问 `workspace/`，读不到项目代码与 API key
+- ✅ **工作区隔离**：Agent 只能访问可配置的工作区（默认 `workspace/`），读不到项目代码与 API key
 - ✅ **Key 外置**：密钥存项目外 `.nova-agent-key.json`
 - ✅ 删除操作需自定义确认弹窗
 - ✅ Markdown 渲染禁用原始 HTML（防 XSS）
@@ -58,13 +58,13 @@
 ## 🏗️ 技术架构
 
 ```
-┌────────────── 浏览器 (Vue 2.7) ──────────────┐
+┌───────────── 浏览器 (React 19) ──────────────┐
 │  Sidebar（Agent/会话/导航）→ MainPane        │
 │    ├─ ChatView（消息 + 工具卡片 + 输入框）    │
 │    ├─ TrajectoryView（轨迹时间线）            │
 │    ├─ SkillManager（技能可视化编辑）          │
 │    └─ ToolManager（工具浏览）                 │
-│  Pinia store → api.ts（REST + SSE）           │
+│  Zustand store → api.ts（REST + SSE）        │
 └───────────────────┬──────────────────────────┘
                     │ fetch /api/*（SSE 流式）
 ┌───────────────────▼──────────────────────────┐
@@ -119,11 +119,16 @@ nova-agent/
 │  ├─ compact.ts              # 上下文压缩（LLM 总结）
 │  ├─ mcp.ts                  # MCP 客户端管理
 │  ├─ skills.ts               # SKILL.md 扫描/解析/CRUD
+│  ├─ models.ts               # 模型注册表（内置 + 自定义提供商）
+│  ├─ memory.ts               # 长期记忆（LRU + 去重合并）
+│  ├─ scheduler.ts            # 定时任务（5 段 cron）
+│  ├─ db.ts                   # SQLite 初始化（node:sqlite）
+│  ├─ builtinTools.ts         # 内置工具（web_search 等）
 │  ├─ store.ts                # Agent/Session 持久化 + API key
 │  └─ types.ts                # 共享类型
-├─ src/                       # 前端（Vue 2.7 + Pinia）
+├─ src/                       # 前端（React 19 + TS + Zustand）
 │  ├─ components/             # Sidebar/ChatView/Trajectory/SkillManager/ToolManager...
-│  ├─ store.ts                # Pinia store
+│  ├─ store.ts                # Zustand store
 │  ├─ api.ts                  # REST + SSE 封装
 │  ├─ markdown.ts             # markdown-it + highlight.js
 │  └─ styles.css              # 设计体系（渐变/玻璃/动画）
@@ -134,7 +139,7 @@ nova-agent/
 │  ├─ filesystem.json
 │  └─ playwright.json
 ├─ data/                      # 运行时数据（SQLite 数据库，不入库）
-├─ workspace/                 # Agent 唯一可访问的工作区（不入库）
+├─ workspace/                 # 默认工作区（设置页可配置；不入库）
 ├─ docs/                      # 开发者文档（架构/开发指南/变更记录/中文版说明）
 └─ package.json
 ```
@@ -150,6 +155,17 @@ nova-agent/
 | `NOVA_AGENT_COMPACT_PCT` | `90` | 自动压缩阈值：上下文占用超过模型窗口的该百分比即压缩（token 感知，按最近一次 API 的真实输入计数） |
 | `NOVA_AGENT_COMPACT_MIN` | `40` | 消息数兜底：超过该条数强制压缩（与 token 阈值双条件） |
 | `NOVA_AGENT_COMPACT_KEEP` | `20` | 压缩后保留的最近消息数（更早的由 LLM 总结） |
+
+---
+
+## 📂 工作区（Agent 文件边界）
+
+默认 Agent 只能读写项目内 `workspace/`。你可以像 Codex 一样把它指向任意文件夹，作为 Agent 的工作区域：
+
+- **设置 → 工作区**：填相对路径（相对项目根解析）或绝对路径；留空 = 重置回默认 `workspace/`。首次运行会引导选择工作区（可跳过，默认 `workspace/` 始终作为兜底工具区）。保存后自动重连挂载工作区的 MCP server（如 filesystem），无需重启
+- 附件上传与 **filesystem** 工具都以它为根——Agent 看到的正是你选的那个文件夹
+- MCP 配置可用 `{{workspace}}` 占位符引用（如 `"args": ["node", "server.js", "{{workspace}}/data"]`）；以 `./` 或 `../` 开头的参数按项目根解析为绝对路径
+- ⚠️ 安全提示：工作区就是 Agent 的权限边界。指向项目根或 API key 文件所在目录（都会被拒绝）等于把该目录的文件访问权交给 Agent；指向其他敏感目录同理——请谨慎选择。另外注意：切换工作区后，旧工作区下的上传附件将不可再预览（附件随工作区走）。
 
 ---
 
@@ -189,7 +205,7 @@ when_to_use: 使用时机
 | id | 说明 |
 |---|---|
 | `playwright` | [@playwright/mcp](https://github.com/microsoft/playwright-mcp)：浏览器操作（打开 / 点击 / 截图 / 读取） |
-| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers)：读写文件（**仅限 workspace/**） |
+| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers)：读写文件（**仅限工作区根目录**，可配置） |
 
 ### 内置 Skills
 
@@ -204,7 +220,7 @@ when_to_use: 使用时机
 
 | 层 | 保护 |
 |---|---|
-| **工作区隔离** | filesystem MCP 只允许 `workspace/`，Agent 读不到项目代码 |
+| **工作区隔离** | filesystem MCP 只允许访问工作区（默认 `workspace/`，可在设置页配置），Agent 读不到项目代码 |
 | **Key 外置** | API key 存项目外 `.nova-agent-key.json`，Agent 不可达 |
 | **XSS 防护** | markdown-it `html: false`，禁原始 HTML |
 | **确认弹窗** | 删除操作需自定义确认 |
@@ -220,7 +236,13 @@ when_to_use: 使用时机
 | POST | `/api/agents` | 新建 Agent |
 | PUT/DELETE | `/api/agents/:id` | 编辑 / 删除 Agent（连带会话） |
 | GET | `/api/mcp-servers` | MCP server 清单 |
+| GET | `/api/mcp-servers/status` | MCP server 健康状态 |
+| POST/PUT/DELETE | `/api/mcp-servers/:id` | 增 / 改 / 删 MCP server（动态生效，无需重启） |
+| POST | `/api/mcp-servers/:id/reconnect` | 重连指定 MCP server |
 | GET | `/api/tools` | 全部工具 + schema |
+| GET | `/api/models` | 模型目录（内置 + 自定义提供商） |
+| GET/POST | `/api/providers/keys` | 各 provider key 状态 / 保存 |
+| GET/POST/DELETE | `/api/providers/custom` | 自定义提供商 CRUD |
 | GET/POST/DELETE | `/api/skills` | 技能 CRUD |
 | GET/POST | `/api/sessions` | 会话列表 / 新建 |
 | PUT/DELETE | `/api/sessions/:id` | 重命名 / 删除会话 |
@@ -230,7 +252,8 @@ when_to_use: 使用时机
 | POST | `/api/tasks/:id/run` | 手动立即执行任务 |
 | **POST** | **`/api/chat`** | **SSE 流式对话（核心）** |
 | POST | `/api/chat/stop` | 中断当前对话 |
-| GET/POST | `/api/config` | API key 状态 / 保存 |
+| GET/POST/PUT/DELETE | `/api/memories` | 长期记忆 CRUD |
+| GET | `/api/health` | 健康检查 |
 
 ---
 
@@ -238,12 +261,12 @@ when_to_use: 使用时机
 
 | 层 | 选型 | 理由 |
 |---|---|---|
-| 前端 | Vue 2.7 + Pinia + Vite | 生态成熟，体积小 |
+| 前端 | React 19 + TypeScript + Vite | 类型安全，组件生态丰富 |
 | 后端 | Express | 路由简单直接 |
 | LLM | Vercel AI SDK + `@ai-sdk/deepseek` | 薄封装，框架无关 |
 | 工具 | **MCP 协议** | 业界标准（"AI 的 USB-C"） |
 | 技能 | **Agent Skills**（SKILL.md） | Claude Code / Cursor 事实标准 |
-| 动画 | Vue 内置 transition | 零依赖 |
+| 动画 | CSS keyframes（styles.css） | 零依赖 |
 
 ---
 

@@ -3,6 +3,7 @@ import { useMainStore } from './store'
 import Sidebar from './components/Sidebar'
 import MainPane from './components/MainPane'
 import AgentConfigModal from './components/AgentConfigModal'
+import WorkspaceOnboarding from './components/WorkspaceOnboarding'
 import type { Agent } from './types'
 
 export type View = 'chat' | 'trajectory' | 'skills' | 'tasks' | 'tools' | 'models' | 'memories' | 'mcps'
@@ -33,6 +34,7 @@ export default function App() {
       />
       <MainPane view={view} onNavigate={navigate} />
       <AgentConfigModal visible={modalVisible} editingAgent={editingAgent} onClose={() => setModalVisible(false)} />
+      <WorkspaceOnboarding />
     </div>
   )
 }

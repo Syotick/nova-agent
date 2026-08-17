@@ -16,12 +16,16 @@ import { tasksRouter } from './routes/tasks.js'
 import { uploadsRouter } from './routes/uploads.js'
 import { listModelCatalog, loadModelProviders, invalidateModelProvidersCache } from './models.js'
 import { listMemories, addMemory, updateMemory, deleteMemory } from './memory.js'
+import { workspaceInfo, setWorkspacePath, ensureWorkspace } from './workspace.js'
 import type { Task } from './types.js'
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
 
 const PORT = Number(process.env.NOVA_AGENT_PORT ?? 8787)
+
+// 启动即确保工作区存在（默认 workspace/，或用户配置的目录）
+ensureWorkspace()
 
 // ---------- MCP server 启动连接（失败不影响启动，打印警告） ----------
 const mcpConfigs = loadMcpConfigs()
@@ -30,17 +34,6 @@ for (const cfg of mcpConfigs) {
     console.error(`[mcp] server "${cfg.id}" failed to connect: ${(err as Error).message}`)
   })
 }
-
-// ---------- 多渠道 API key 管理 ----------
-// GET：各 provider key 状态（不返回明文）
-app.get('/api/providers/keys', (_req, res) => {
-  const providers = loadModelProviders()
-  res.json({
-    providers: Object.fromEntries(
-      providers.map((p) => [p.id, { source: providerKeySource(p.id, p.apiKeyEnv) }]),
-    ),
-  })
-})
 
 // ---------- 业务路由 ----------
 app.use('/api/agents', agentsRouter)
@@ -214,6 +207,33 @@ app.delete('/api/memories/:id', (req, res) => {
   const ok = deleteMemory(req.params.id)
   if (!ok) return res.status(404).json({ error: 'memory not found' })
   res.json({ ok: true })
+})
+
+// ---------- 工作区（Agent 文件权限边界，filesystem MCP 挂载根） ----------
+// GET：当前配置 + 解析后绝对路径 + 存在状态
+app.get('/api/workspace', (_req, res) => {
+  res.json(workspaceInfo())
+})
+
+// PUT：设置工作区（相对路径按项目根解析；空串 = 重置回默认 workspace/）
+app.put('/api/workspace', async (req, res) => {
+  const { path } = req.body as { path?: unknown }
+  if (typeof path !== 'string') return res.status(400).json({ error: 'path (string) required' })
+  const err = setWorkspacePath(path)
+  if (err) return res.status(400).json({ error: err })
+  // 确保目录存在（否则 filesystem 等挂载工作区的 server 会启动失败）
+  ensureWorkspace()
+  // 重连挂载工作区的 MCP server（filesystem 等用 {{workspace}} 占位符的），新路径立即生效；
+  // 逐个串行并收集结果，让前端知道哪个 server 重连失败
+  const reconnected: Array<{ serverId: string; ok: boolean; error?: string }> = []
+  for (const cfg of loadMcpConfigs()) {
+    if ((cfg.args ?? []).some((a) => a.includes('{{workspace}}'))) {
+      const st = await reconnectServer(cfg.id).catch((e: Error) =>
+        ({ serverId: cfg.id, name: cfg.name ?? cfg.id, connected: false, toolCount: 0, lastError: e.message }))
+      reconnected.push({ serverId: cfg.id, ok: st.connected, error: st.lastError })
+    }
+  }
+  res.json({ ...workspaceInfo(), reconnected })
 })
 
 // ---------- 健康检查 ----------

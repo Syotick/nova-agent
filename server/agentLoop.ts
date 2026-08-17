@@ -2,6 +2,7 @@
 import { streamText, tool, jsonSchema, isStepCount } from 'ai'
 import type { SharedV4ProviderOptions } from '@ai-sdk/provider'
 import { join } from 'node:path'
+import { getWorkspacePath } from './workspace.js'
 import type { ChatEvent, Agent, Message, Session, ToolCallRecord, Attachment, ReasoningOption, MessageSegment } from './types.js'
 import { listToolsFor, callMcpTool } from './mcp.js'
 import { injectSkills } from './skills.js'
@@ -73,7 +74,7 @@ export async function runTurn(
   // 附件注入模型上下文：追加说明 + 绝对路径（filesystem 工具可直接读）
   let modelUserText = userText
   if (attachments?.length) {
-    const wsRoot = join(process.cwd(), 'workspace')
+    const wsRoot = getWorkspacePath()
     const list = attachments
       .map((a) => `- ${a.name}（${fmtSize(a.size)}，类型 ${a.mime}，完整路径 ${join(wsRoot, a.path)}）`)
       .join('\n')
