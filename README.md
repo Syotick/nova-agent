@@ -1,10 +1,20 @@
 # ✨ Nova Agent
 
-**Nova Agent** is a lightweight, self-contained open-source AI agent — a minimal, fully functional alternative to Claude Code. Built with **React 19 + TypeScript + Express + Vercel AI SDK + MCP + Agent Skills**.
+**Nova Agent** — *nova* means "a new star": this compact, fully readable, self-contained AI agent is the launchpad for the next generation of agent engineers. The whole stack — agent loop, MCP tools, Agent Skills, memory, task automation — is designed to be read end to end in one evening, then run, then modified. No framework black boxes.
 
-> Compact by design, complete by default: agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, and sandboxed security — all included and extensible.
+> Everything that makes an agent work, in one small codebase: agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, sandboxed security — all included and extensible.
 
 [中文文档](./docs/README.zh-CN.md)
+
+---
+
+## 🎓 Who is this for
+
+- **University students & career-switching developers** — the best open-source project to learn agents: read it top to bottom, run it, break it, fix it. Everything lives in one small codebase.
+- **Self-hosting hobbyists** — local, private, vendor-neutral (any OpenAI-compatible model), zero telemetry, single environment (Node 22+).
+- **DIY base / second development** — add a skill by dropping a folder; add a tool by dropping a JSON config.
+
+> If you need a battle-tested product with a plugin ecosystem, use Claude Code, Cursor, Windsurf, etc. — this project exists for learning and teaching, not for competing with them.
 
 ---
 
@@ -19,6 +29,7 @@
 - ✅ **Trajectory view**: per-step timeline + inspector (input / output / duration / tokens)
 - ✅ **Stop & resume**: Stop button during streaming; generated content is preserved
 - ✅ **Context compaction**: when a session exceeds 40 messages, earlier history is summarized by the LLM (injected into the system prompt), keeping the last 20 — no more context overflow
+- ✅ **Terminal (Codex mode)**: `run_command` executes shell commands in the workspace (npm / git / node / python…) with output capture, timeout auto-kill and whole process-tree cleanup on interrupt — read code → edit code → verify with builds/tests → start the project, all within the agent
 
 ### Multi-Agent Management
 - ✅ Create / edit / delete agents (persona + model + tool selection + skill selection)

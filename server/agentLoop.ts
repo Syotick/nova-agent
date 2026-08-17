@@ -11,6 +11,7 @@ import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools } from './builtinTools.js'
 import { newId } from './store.js'
 import { searchMemories, addMemory, listMemories, touchMemories } from './memory.js'
+import { executeCommand, killSessionProcesses } from './terminal.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
 // （可环境变量覆盖：NOVA_AGENT_MAX_STEPS）
@@ -27,6 +28,8 @@ const activeSubruns = new Map<string, Set<() => void>>()
 export function abortRun(sessionId: string) {
   const run = activeRuns.get(sessionId)
   if (run) run.abort()
+  // 连带终止该会话正在运行的命令进程（防中断后命令继续跑/占端口）
+  void killSessionProcesses(sessionId)
   // 连带中断该主 turn 的所有活动子任务
   const subs = activeSubruns.get(sessionId)
   if (subs) {
@@ -254,6 +257,54 @@ export async function runTurn(
     },
   })
 
+  // 内置工具：run_command（终端执行，Codex 模式核心——所有 Agent 自动拥有）
+  // 工作区即项目：命令默认在工作区根执行，可指定子目录；超时自动终止进程树；
+  // 会话中断（用户停止/连接断开）时由 abortRun -> killSessionProcesses 清理
+  tools['run_command'] = tool({
+    description:
+      '在工作区（你的项目目录）执行 shell 命令（npm / git / node 等），返回命令输出。' +
+      '改完代码后用这个工具跑构建/测试/启动（如 npm run build / npm test / npm run dev）验证你的改动。' +
+      '命令必须非交互（不能等待输入）；超时（默认 120s）会自动终止进程并保留已收集的输出，启动类命令通常按超时处理——根据输出判断服务是否已经启动成功。',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: '要执行的 shell 命令（非交互）' },
+        cwd: { type: 'string', description: '工作区内的子目录（可选；默认工作区根）' },
+        timeoutMs: { type: 'number', description: '超时毫秒（可选；默认 120000，上限 600000）' },
+      },
+      required: ['command'],
+    }),
+    execute: async (args) => {
+      const record: ToolCallRecord = {
+        id: uid(),
+        name: 'run_command',
+        input: args,
+        output: '',
+        status: 'running',
+        startedAt: Date.now(),
+        durationMs: 0,
+      }
+      segments.push({ kind: 'tool', call: record })
+      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
+      try {
+        const res = await executeCommand(session.id, args as never)
+        record.output = res.content
+        record.status = res.isError ? 'error' : 'success'
+        record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return res
+      } catch (err) {
+        record.output = `ERROR: ${(err as Error).message}`
+        record.status = 'error'
+        record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return { content: `Error: 命令执行失败（${(err as Error).message}）`, isError: true }
+      }
+    },
+  })
+
   // 内置工具：remember（跨会话记忆，所有 Agent 自动拥有）
   // 模型在对话中判断"用户明确表达的偏好/重要事实"时调用；注入到所有后续会话的 system prompt
   tools['remember'] = tool({
@@ -333,6 +384,11 @@ export async function runTurn(
   })()
   const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。\n\n# 工具选择策略（重要）\n- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。\n- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。\n- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。
 
+# 任务执行与项目操作（run_command）
+- 工作区就是你的项目目录：读代码用 filesystem 的 read/search 工具，改代码用 edit/write 工具，验证改动用 run_command 执行构建/测试（npm run build / npm test / node 脚本等）。
+- 改完代码必须主动验证：先跑一遍构建或测试确认没有引入错误，再向用户汇报结果。
+- 命令不等待输入；启动类命令（npm run dev 等）超时终止是正常的——根据输出判断服务是否启动成功即可。
+
 # 子 Agent 编排（subagent）
 - 复杂任务可派生子 Agent 并行执行（同一轮多个 subagent 调用会并行跑）：每个 task 必须自包含（目标+约束+交付格式）；可并行拆分的方向不要串行做。
 - 子任务失败（返回 ERROR）时：有明确原因 → 修正 task 后重试最多 1 次；有部分产出 → 基于部分产出继续；不可恢复 → 立即停止并告知用户。禁止编造子任务结果或虚构其细节。
@@ -366,6 +422,8 @@ export async function runTurn(
   let interrupted = false
   abortController.signal.addEventListener('abort', () => { interrupted = true })
   activeRuns.set(session.id, { abort: () => abortController.abort() })
+  // 清理上一轮残留的命令进程（防异常退出的 turn 留下幽灵进程）
+  void killSessionProcesses(session.id)
 
   const result = await streamText({
     model: createModelForAgent(agent),
@@ -426,6 +484,7 @@ export async function runTurn(
   // 模型调用失败：发 error 事件让前端翻译成用户可读的提示（不落盘空消息）
   if (modelError && !interrupted) {
     activeRuns.delete(session.id)
+    void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
     emit({ type: 'error', sessionId: session.id, message: modelError.message })
     return { id: uid(), role: 'assistant', content: '', createdAt: Date.now() }
   }
@@ -435,6 +494,7 @@ export async function runTurn(
   // 后端若再落盘一条会导致刷新后看到重复的"已中断"。
   if (interrupted && !assistantText) {
     activeRuns.delete(session.id)
+    void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
     return { id: uid(), role: 'assistant', content: '', createdAt: Date.now() }
   }
 
@@ -452,6 +512,7 @@ export async function runTurn(
   emit({ type: 'done', sessionId: session.id, message: finalMsg })
 
   activeRuns.delete(session.id)
+    void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
   return finalMsg
 }
 
