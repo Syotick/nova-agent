@@ -145,7 +145,7 @@ export async function runTurn(
 
   // 内置工具：subagent（子 Agent 编排，所有 Agent 自动拥有）
   // 子任务 = 内存临时会话 + 完整独立 loop（无 SSE）；只把最终文本/结构化错误交回主 Agent。
-  // 失败策略（业界调研）：返回原因 + 部分产出，由主 Agent 决策，不盲目重试、禁止编造结果。
+  // 失败策略：返回原因 + 部分产出，由主 Agent 决策，不盲目重试、禁止编造结果。
   tools['subagent'] = tool({
     description:
       '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），完成后返回其最终结论。' +
