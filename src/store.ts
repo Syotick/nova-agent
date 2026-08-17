@@ -1,6 +1,6 @@
 // Zustand store：agents / sessions / tasks / models / 流式状态
 import { create } from 'zustand'
-import { api, streamChat, autoTitle } from './api'
+import { api, streamChat, streamVibe, autoTitle } from './api'
 import { translateModelError } from './lib/errors'
 import type {
   Agent, Session, SkillMeta, McpServerConfig, Message, ToolCallRecord, ChatEvent, ModelProvider, Attachment, Task,
@@ -56,6 +56,9 @@ interface MainState {
   currentSegments: MessageSegment[] // 流式时间线（文本/工具交错，DSH 风格）
   error: string
   cancelFn: (() => void) | null
+  // vibe 自治循环状态（目标驱动多轮执行）
+  vibeRunning: boolean
+  vibeRound: { round: number; maxRounds: number } | null
 
   // config
   providerKeyStatus: Record<string, KeySource> // providerId → key 状态
@@ -97,6 +100,7 @@ interface MainState {
   clearTaskBadge: () => void
   loadWorkspace: () => Promise<void>
   saveWorkspace: (path: string) => Promise<string | null>
+  sendVibe: (goal: string, maxRounds?: number) => Promise<void>
 }
 
 let taskPollTimer: ReturnType<typeof setInterval> | null = null
@@ -122,6 +126,8 @@ export const useMainStore = create<MainState>()((set, get) => ({
   currentSegments: [],
   error: '',
   cancelFn: null,
+  vibeRunning: false,
+  vibeRound: null,
   providerKeyStatus: {},
   reasoningPref: { type: 'adaptive' },
   initialized: false,
@@ -400,6 +406,42 @@ export const useMainStore = create<MainState>()((set, get) => ({
     set({ cancelFn: cancel })
   },
 
+  // vibe 自治循环：目标驱动多轮执行（无需用户逐轮催促）
+  async sendVibe(goal: string, maxRounds?: number) {
+    const trimmed = goal.trim()
+    if (!trimmed || get().streaming) return
+
+    let session = get().currentSession()
+    if (!session) {
+      if (!get().currentAgentId) return
+      session = await api.createSession(get().currentAgentId)
+      set({ sessions: [session, ...get().sessions], currentSessionId: session.id })
+    }
+    if (session.title === '新会话') {
+      session.title = autoTitle(trimmed)
+    }
+
+    // 目标消息落屏（标注 vibe 模式，便于用户区分）
+    const goalMsg: Message = {
+      id: `msg_${Date.now().toString(36)}`,
+      role: 'user',
+      content: `🚀 Vibe 目标：${trimmed}`,
+      createdAt: Date.now(),
+    }
+    session.messages = [...session.messages, goalMsg]
+    set({ sessions: get().sessions.map((x) => (x.id === session.id ? session : x)) })
+
+    set({
+      currentText: '', currentToolCalls: [], currentSegments: [], error: '',
+      streaming: true, streamingSessionId: session.id, vibeRunning: true, vibeRound: null,
+    })
+
+    const { cancel } = streamVibe(session.id, trimmed, (e: ChatEvent) => {
+      handleEvent(set, get, e)
+    }, maxRounds)
+    set({ cancelFn: cancel })
+  },
+
   async requestNotifyPermission() {
     try {
       if ('Notification' in window && Notification.permission === 'default') {
@@ -535,11 +577,47 @@ function handleEvent(set: StoreSet, get: () => MainState, e: ChatEvent) {
         update.currentText = ''
         update.currentToolCalls = []
         update.currentSegments = []
-        update.streaming = false
-        update.cancelFn = null
-        update.streamingSessionId = ''
+        if (s.vibeRunning) {
+          // vibe 循环进行中：每轮 runTurn 结束也会发 done——保持 streaming 锁，
+          // 仅清临时区让下一轮从头流式（tools/text 重新累积）
+        } else {
+          update.streaming = false
+          update.cancelFn = null
+          update.streamingSessionId = ''
+        }
       }
       set(update)
+      break
+    }
+    case 'vibe_start': {
+      set({ vibeRunning: true, vibeRound: { round: 0, maxRounds: e.maxRounds }, error: '' })
+      break
+    }
+    case 'vibe_round': {
+      set({ vibeRound: { round: e.round, maxRounds: s.vibeRound?.maxRounds ?? e.round } })
+      break
+    }
+    case 'vibe_done': {
+      set({
+        vibeRunning: false,
+        vibeRound: null,
+        streaming: false,
+        streamingSessionId: '',
+        currentText: '',
+        currentToolCalls: [],
+        currentSegments: [],
+        cancelFn: null,
+      })
+      // 完成通知（用户已授权通知时）
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(e.converged ? '✅ Vibe 完成' : '⚠️ Vibe 未收敛', {
+            body: e.converged
+              ? `已完成（${e.rounds} 轮）：${e.note.replace(/^\[DONE\]\s*/, '').slice(0, 80)}`
+              : `${e.note.slice(0, 100)}`,
+          })
+        } catch { /* ignore */ }
+      }
       break
     }
     case 'error': {

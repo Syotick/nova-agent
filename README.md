@@ -30,6 +30,7 @@
 - ✅ **Stop & resume**: Stop button during streaming; generated content is preserved
 - ✅ **Context compaction**: when a session exceeds 40 messages, earlier history is summarized by the LLM (injected into the system prompt), keeping the last 20 — no more context overflow
 - ✅ **Terminal (Codex mode)**: `run_command` executes shell commands in the workspace (npm / git / node / python…) with output capture, timeout auto-kill and whole process-tree cleanup on interrupt — read code → edit code → verify with builds/tests → start the project, all within the agent
+- ✅ **Vibe loop (autonomous goals)**: type a goal and press 🚀 Vibe — the agent plans, implements, verifies and self-heals across multiple rounds until it converges (explicit `[DONE]` marker), with round/time budgets and a circuit breaker that stops on repeated identical failures; interrupts clean up running processes
 
 ### Multi-Agent Management
 - ✅ Create / edit / delete agents (persona + model + tool selection + skill selection)

@@ -1,8 +1,9 @@
-// 聊天路由：SSE 流式对话 + 中断
+// 聊天路由：SSE 流式对话 + 中断 + vibe 自治循环
 import express from 'express'
 import type { ChatEvent, Attachment, ReasoningOption } from '../types.js'
 import { getSession, getAgent, saveSession } from '../store.js'
 import { runTurn, abortRun } from '../agentLoop.js'
+import { runVibe } from '../vibe.js'
 
 export const chatRouter = express.Router()
 
@@ -43,6 +44,37 @@ chatRouter.post('/', async (req, res) => {
   try {
     await runTurn(session, agent, text, emit, attachments, reasoning)
     saveSession(session) // 检查点：完整 turn 落盘
+  } catch (err) {
+    const msg = (err as Error).message ?? String(err)
+    emit({ type: 'error', sessionId: session.id, message: msg })
+  } finally {
+    res.end()
+  }
+})
+
+// vibe 自治循环：目标驱动多轮执行（POST /api/chat/vibe）
+// body: { sessionId, goal, maxRounds? }；SSE 流推送 vibe_start/vibe_round/vibe_done + 每轮内部事件
+chatRouter.post('/vibe', async (req, res) => {
+  const { sessionId, goal, maxRounds } = req.body as { sessionId?: string; goal?: string; maxRounds?: number }
+  if (!sessionId || !goal?.trim()) {
+    return res.status(400).json({ error: 'sessionId and goal required' })
+  }
+  const session = getSession(sessionId)
+  if (!session) return res.status(404).json({ error: 'session not found' })
+  const agent = getAgent(session.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found' })
+
+  const emit = sse(res)
+  saveSession(session)
+
+  // 客户端断开 → 中断运行（连带清理命令进程）
+  res.on('close', () => {
+    if (!res.writableEnded) abortRun(sessionId)
+  })
+
+  try {
+    await runVibe(session, agent, { goal, maxRounds }, emit)
+    saveSession(session) // 检查点：多轮消息已由 runTurn 逐轮落盘
   } catch (err) {
     const msg = (err as Error).message ?? String(err)
     emit({ type: 'error', sessionId: session.id, message: msg })

@@ -112,27 +112,26 @@ export const api = {
     json<{ ok: boolean }>(`/memories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 
-// SSE 流式聊天：onEvent 回调返回一个 cancel 函数
-export function streamChat(
+// SSE 事件流公共消费（POST path + body → 逐帧回调 onEvent）；返回 cancel
+function streamEvents(
+  path: string,
+  body: Record<string, unknown>,
   sessionId: string,
-  text: string,
   onEvent: (e: ChatEvent) => void,
-  attachments?: Attachment[],
-  reasoning?: ReasoningOption,
 ): { cancel: () => void } {
   const controller = new AbortController()
 
   ;(async () => {
     try {
-      const res = await fetch(`${BASE}/chat`, {
+      const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, text, attachments, reasoning }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
       if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => ({}))
-        onEvent({ type: 'error', sessionId, message: (body as { error?: string }).error ?? `HTTP ${res.status}` })
+        const body2 = await res.json().catch(() => ({}))
+        onEvent({ type: 'error', sessionId, message: (body2 as { error?: string }).error ?? `HTTP ${res.status}` })
         return
       }
       const reader = res.body.getReader()
@@ -152,7 +151,7 @@ export function streamChat(
           if (line) {
             try {
               const ev = JSON.parse(line.slice(6)) as ChatEvent
-              if (ev.type === 'done') sawDone = true
+              if (ev.type === 'done' || ev.type === 'vibe_done') sawDone = true
               onEvent(ev)
             } catch {
               // 忽略坏帧
@@ -160,7 +159,7 @@ export function streamChat(
           }
         }
       }
-      // 流正常结束但没收到 done 帧（后端异常中断）：兜底清理前端流式状态，
+      // 流正常结束但没收到完成帧（后端异常中断）：兜底清理前端流式状态，
       // 避免 streaming 永远挂着（否则后续任何操作都会触发 cancelStream 落盘"已中断"）
       if (!sawDone) {
         onEvent({ type: 'error', sessionId, message: '' })
@@ -173,6 +172,26 @@ export function streamChat(
   })()
 
   return { cancel: () => controller.abort() }
+}
+
+export function streamChat(
+  sessionId: string,
+  text: string,
+  onEvent: (e: ChatEvent) => void,
+  attachments?: Attachment[],
+  reasoning?: ReasoningOption,
+): { cancel: () => void } {
+  return streamEvents('/chat', { sessionId, text, attachments, reasoning }, sessionId, onEvent)
+}
+
+// vibe 自治循环（目标驱动多轮）：SSE 推送 vibe_start/vibe_round/vibe_done + 每轮内部事件
+export function streamVibe(
+  sessionId: string,
+  goal: string,
+  onEvent: (e: ChatEvent) => void,
+  maxRounds?: number,
+): { cancel: () => void } {
+  return streamEvents('/chat/vibe', { sessionId, goal, maxRounds }, sessionId, onEvent)
 }
 
 // 工具：根据 toolCalls 生成初始消息标题

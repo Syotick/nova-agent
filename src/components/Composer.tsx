@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Paperclip, Send, Square, Brain, Image, X } from 'lucide-react'
+import { Paperclip, Send, Square, Brain, Image, X, Rocket } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { cn, fmtSize } from '../lib/utils'
@@ -16,6 +16,7 @@ const BASE_REASONING: Array<{ value: string; label: string; option: ReasoningOpt
 export default function Composer() {
   const streaming = useMainStore((s) => s.streaming)
   const send = useMainStore((s) => s.send)
+  const sendVibe = useMainStore((s) => s.sendVibe)
   const cancelStream = useMainStore((s) => s.cancelStream)
   const reasoningPref = useMainStore((s) => s.reasoningPref)
   const setReasoningPref = useMainStore((s) => s.setReasoningPref)
@@ -89,6 +90,15 @@ export default function Composer() {
     await send(text, atts)
     setDraft('')
     if (taRef.current) taRef.current.style.height = 'auto'
+  }
+
+  // vibe 自治循环：输入框内容作为目标，交给 agent 多轮自愈直到收敛
+  const handleVibe = async () => {
+    const text = draft.trim()
+    if (!text || streaming || uploading) return
+    setDraft('')
+    if (taRef.current) taRef.current.style.height = 'auto'
+    await sendVibe(text)
   }
 
   return (
@@ -184,14 +194,25 @@ export default function Composer() {
             </>
           )}
           {!streaming ? (
-            <button
-              className="gradient-brand flex items-center gap-2 rounded-xl px-5 py-2 text-[13px] font-semibold text-white shadow-[0_3px_16px_rgba(77,107,254,0.35)] transition-all hover:-translate-y-px hover:brightness-110 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
-              disabled={(!draft.trim() && !attachments.length) || uploading}
-              onClick={() => void handleSend()}
-            >
-              {uploading ? '上传中…' : '发送'}
-              <Send className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-primary/30 px-3 text-[13px] font-medium text-primary transition-all hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-40"
+                title="Vibe 模式：把输入作为目标，Agent 自动多轮执行直到完成（最长 5 轮/15 分钟）"
+                disabled={!draft.trim() || uploading}
+                onClick={() => void handleVibe()}
+              >
+                <Rocket className="h-3.5 w-3.5" />
+                Vibe
+              </button>
+              <button
+                className="gradient-brand flex items-center gap-2 rounded-xl px-5 py-2 text-[13px] font-semibold text-white shadow-[0_3px_16px_rgba(77,107,254,0.35)] transition-all hover:-translate-y-px hover:brightness-110 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
+                disabled={(!draft.trim() && !attachments.length) || uploading}
+                onClick={() => void handleSend()}
+              >
+                {uploading ? '上传中…' : '发送'}
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ) : (
             <button className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-5 py-2 text-[13px] font-semibold text-destructive transition-all hover:scale-[1.03] hover:bg-destructive/20" onClick={cancelStream}>
               <Square className="h-2.5 w-2.5 fill-current" />
