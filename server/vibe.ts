@@ -1,9 +1,10 @@
 // 目标驱动自治循环（vibe coding）：一条目标 → 多轮自愈直到收敛
-// 设计依据（行业调研）：
-// - Codex /goal 长任务：状态持久 + resume（我们每轮消息落库，天然支持续跑）
-// - "永动机"教训：模型 turn 结束 ≠ 任务结束，循环必须由编排层驱动
-// - Circuit Breaker 模式：连续相同失败 = 卡死 → 熔断止损，不能只靠轮数上限
-// - Turn-Control 实证：先规划后行动减少无效轮；task budget 分层
+// 设计要点：
+// - 循环由编排层驱动：模型单轮结束不代表任务结束，上轮输出作为下轮反馈
+// - 收敛以模型显式 [DONE] 声明为准
+// - 熔断：连续相同输出视为卡死，提前止损（只设轮数上限不够，会白烧时间）
+// - 预算：轮数 + 时长 + 每轮步骤（agentLoop 内）三重上限
+// - 每轮消息落库，重新发起即为从历史续跑（天然支持 resume）
 import { runTurn } from './agentLoop.js'
 import type { Agent, Session, ChatEvent } from './types.js'
 
