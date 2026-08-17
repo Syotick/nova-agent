@@ -12,6 +12,8 @@ export interface ModelEntry {
   name?: string
   /** 该模型支持的思考强度档位（reasoningEffort）。缺省/空 = 仅支持 thinking 开关（adaptive/off） */
   reasoningEfforts?: string[]
+  /** 上下文窗口大小（token）。缺省 = 128000（进度条/压缩阈值用） */
+  contextWindow?: number
 }
 
 export interface ModelProvider {
@@ -21,6 +23,8 @@ export interface ModelProvider {
   baseUrl?: string
   /** 该 provider 的 API key 环境变量名（留空则用全局外部 key） */
   apiKeyEnv?: string
+  /** 供应商级上下文窗口（自定义供应商统一声明；模型级 contextWindow 优先） */
+  contextWindow?: number
   models: ModelEntry[]
 }
 
@@ -56,9 +60,11 @@ export function loadModelProviders(): ModelProvider[] {
     const builtin = loadBuiltinProviders()
     const custom = listCustomProviders().map((p) => ({
       ...p,
+      // 供应商级上下文窗口下推到模型（模型级声明优先）
       models: p.models.map((m) => ({
         ...m,
         reasoningEfforts: m.reasoningEfforts ?? DEFAULT_REASONING_EFFORTS,
+        contextWindow: m.contextWindow ?? p.contextWindow,
       })),
     }))
     cached = [...builtin, ...custom]
@@ -78,7 +84,8 @@ export function listModelCatalog() {
     id: p.id,
     name: p.name ?? p.id,
     baseUrl: p.baseUrl ?? '',
-    models: p.models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoningEfforts: m.reasoningEfforts })),
+    contextWindow: p.contextWindow,
+    models: p.models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoningEfforts: m.reasoningEfforts, contextWindow: m.contextWindow })),
   }))
 }
 

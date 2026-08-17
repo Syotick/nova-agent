@@ -66,6 +66,8 @@ export interface CustomProviderModel {
   name?: string
   /** 思考档位声明（可选；未声明时默认开放全部档位） */
   reasoningEfforts?: string[]
+  /** 模型级上下文窗口（token，可选；缺省 1M，供应商级声明优先于缺省） */
+  contextWindow?: number
 }
 
 export interface CustomProvider {
@@ -73,6 +75,8 @@ export interface CustomProvider {
   name: string
   baseUrl: string
   apiKeyEnv?: string
+  /** 供应商级上下文窗口（token，可选；缺省 1M） */
+  contextWindow?: number
   models: CustomProviderModel[]
 }
 
@@ -119,6 +123,10 @@ export function upsertCustomProvider(p: CustomProvider): { ok: boolean; error?: 
     name: p.name.trim(),
     baseUrl,
     apiKeyEnv: p.apiKeyEnv?.trim() || undefined,
+    // 上下文窗口：>0 的有限数才保存，非法值忽略（走缺省 1M）
+    contextWindow: typeof p.contextWindow === 'number' && Number.isFinite(p.contextWindow) && p.contextWindow > 0
+      ? Math.floor(p.contextWindow)
+      : undefined,
     models: p.models
       .filter((m) => m.id?.trim())
       .map((m) => ({ id: m.id.trim(), name: m.name?.trim() || undefined })),

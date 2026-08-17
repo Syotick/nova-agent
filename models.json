@@ -7,7 +7,8 @@
     "models": [
       {
         "id": "deepseek-v4-flash",
-        "name": "v4-flash（快速，默认）"
+        "name": "v4-flash（快速，默认）",
+        "contextWindow": 1000000
       },
       {
         "id": "deepseek-v4-pro",
@@ -18,7 +19,8 @@
           "high",
           "xhigh",
           "max"
-        ]
+        ],
+        "contextWindow": 1000000
       }
     ]
   }
