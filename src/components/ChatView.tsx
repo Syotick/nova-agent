@@ -1,4 +1,4 @@
-import { Scissors, Bot } from 'lucide-react'
+import { Scissors, Bot, Rocket } from 'lucide-react'
 import { useMainStore } from '../store'
 import MessageList from './MessageList'
 import Composer from './Composer'
@@ -9,6 +9,7 @@ export default function ChatView() {
   const error = useMainStore((s) => s.error)
   const compacting = useMainStore((s) => s.compacting)
   const compactSession = useMainStore((s) => s.compactSession)
+  const vibeRound = useMainStore((s) => s.vibeRound)
   const currentSession = sessions.find((s) => s.id === currentSessionId)
 
   const canCompact = currentSession && currentSession.messages.length > 40 && !currentSession.summary
@@ -18,6 +19,14 @@ export default function ChatView() {
       <div className="flex min-h-0 flex-1 flex-col">
         {currentSession ? (
           <>
+            {/* Vibe 运行指示 */}
+            {vibeRound && (
+              <div className="mx-6 mt-2.5 flex flex-none items-center gap-2 rounded-lg border border-primary/25 bg-primary/8 px-3.5 py-2 text-xs text-primary animate-fade-in">
+                <Rocket className="h-3.5 w-3.5" />
+                <span className="font-semibold">Vibe 运行中</span>
+                <span className="text-muted-foreground">第 {vibeRound.round || 1}/{vibeRound.maxRounds} 轮 · Agent 正在自动执行，可随时停止</span>
+              </div>
+            )}
             {/* 压缩横幅 */}
             {(currentSession.summary || canCompact) && (
               <div className="mx-6 mt-2.5 flex flex-none items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2 text-xs text-muted-foreground animate-fade-in">

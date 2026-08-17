@@ -103,6 +103,10 @@ export type ChatEvent =
   | { type: 'done'; sessionId: string; message: Message }
   | { type: 'compact'; sessionId: string; summary: string; removed: number; kept: number }
   | { type: 'error'; sessionId: string; message: string }
+  // vibe 自治循环事件（目标驱动多轮执行）
+  | { type: 'vibe_start'; sessionId: string; goal: string; maxRounds: number }
+  | { type: 'vibe_round'; sessionId: string; round: number; note: string }
+  | { type: 'vibe_done'; sessionId: string; converged: boolean; rounds: number; note: string }
 
 /** 思考模式（reasoning）配置：DeepSeek 渠道专用 */
 export interface ReasoningOption {
