@@ -30,12 +30,15 @@ export interface ModelEntry {
   name?: string
   /** 该模型支持的思考强度档位（reasoningEffort）。缺省/空 = 仅支持 thinking 开关 */
   reasoningEfforts?: string[]
+  /** 上下文窗口大小（token）。缺省 = 128000 */
+  contextWindow?: number
 }
 export interface ModelProvider {
   id: string
   name: string
   baseUrl: string
   apiKeyEnv?: string
+  contextWindow?: number
   models: ModelEntry[]
 }
 
@@ -48,6 +51,8 @@ export interface CustomProvider {
   name: string
   baseUrl: string
   apiKeyEnv?: string
+  /** 供应商级上下文窗口（token，可选；缺省 1M） */
+  contextWindow?: number
   models: Array<{ id: string; name?: string }>
 }
 
@@ -107,6 +112,8 @@ export interface Session {
   updatedAt: number
   /** 最近一次压缩生成的上下文摘要 */
   summary?: string
+  /** 最近一次压缩移除的消息数（内存态，不落盘） */
+  lastCompactRemoved?: number
 }
 
 /** 定时任务（5 段 cron） */

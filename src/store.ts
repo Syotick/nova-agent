@@ -502,6 +502,7 @@ function handleEvent(set: StoreSet, get: () => MainState, e: ChatEvent) {
       const patched = { ...session }
       patched.messages = patched.messages.slice(e.removed)
       patched.summary = e.summary
+      patched.lastCompactRemoved = e.removed // 内存态（不落盘），供横幅显示"已压缩 N 条"
       set({ sessions: s.sessions.map((x) => (x.id === session.id ? patched : x)) })
       break
     }

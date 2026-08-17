@@ -47,7 +47,7 @@ export async function runTurn(
 
   // 自动压缩：turn 开始前检查消息数，超过阈值先总结旧消息再继续
   // （压缩本身也消耗一轮 LLM 调用，仅当历史超长时触发；先压缩再追加本轮用户消息）
-  if (shouldCompact(session)) {
+  if (shouldCompact(session, agent.model)) {
     try {
       const result = await compactSession(session, agent)
       if (result) {
@@ -104,12 +104,14 @@ export async function runTurn(
           record.output = out
           record.status = 'success'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: out }
         } catch (err) {
           record.output = `ERROR: ${(err as Error).message}`
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: `Error: ${(err as Error).message}`, isError: true }
         }
@@ -128,7 +130,10 @@ export async function runTurn(
             segments.push({ kind: 'tool', call: record })
             emit({ type: 'tool_call_start', sessionId: session.id, call: record })
           },
-          onEnd: (record) => emit({ type: 'tool_call_end', sessionId: session.id, call: record }),
+          onEnd: (record) => {
+            executedToolCalls.push(record)
+            emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+          },
         })
       },
     })
@@ -169,6 +174,7 @@ export async function runTurn(
           record.output = 'ERROR: task required'
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: 'Error: task 参数必填', isError: true }
         }
@@ -177,6 +183,7 @@ export async function runTurn(
           record.output = `ERROR: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层）`
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: `Error: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层），请直接在当前层完成`, isError: true }
         }
@@ -208,6 +215,7 @@ export async function runTurn(
             record.output = msg.content
             record.status = 'success'
             record.durationMs = Date.now() - record.startedAt
+            executedToolCalls.push(record)
             emit({ type: 'tool_call_end', sessionId: session.id, call: record })
             return { content: msg.content }
           }
@@ -217,6 +225,7 @@ export async function runTurn(
           record.output = out
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: out, isError: true }
         } catch (err) {
@@ -226,6 +235,7 @@ export async function runTurn(
           record.output = out
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: out, isError: true }
         } finally {
@@ -236,6 +246,7 @@ export async function runTurn(
         record.output = `ERROR: ${(err as Error).message}`
         record.status = 'error'
         record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
         return { content: `Error: 子任务调度失败（${(err as Error).message}）`, isError: true }
       }
@@ -273,6 +284,7 @@ export async function runTurn(
           record.output = 'ERROR: content required'
           record.status = 'error'
           record.durationMs = Date.now() - record.startedAt
+          executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           return { content: 'Error: content 参数必填', isError: true }
         }
@@ -281,12 +293,14 @@ export async function runTurn(
         record.output = `${verb}：${result.memory.content}`
         record.status = 'success'
         record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
         return { content: `${verb}（将影响后续所有会话）：${result.memory.content}${result.merged ? '（内容与原记忆相似，已合并更新）' : ''}` }
       } catch (err) {
         record.output = `ERROR: ${(err as Error).message}`
         record.status = 'error'
         record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
         return { content: `Error: 记忆保存失败（${(err as Error).message}）`, isError: true }
       }
@@ -342,6 +356,9 @@ export async function runTurn(
   let outputTokens = 0
   // 时间线分段：文本与工具按发生顺序交错（DSH 风格）
   const segments: MessageSegment[] = []
+  // 实际执行的工具调用记录（execute 端收集：output/状态/耗时完整，与前端事件同源；
+  // AI SDK v7 的 step.toolCalls 不含 result，无法从中取输出）
+  const executedToolCalls: ToolCallRecord[] = []
 
   // 中断控制器（abort 来源：用户点停止 / 客户端断开 / 页面刷新导致 SSE 连接关闭）
   const abortController = new AbortController()
@@ -383,34 +400,11 @@ export async function runTurn(
     },
   })
 
-  // 等待并收集所有步骤的工具调用记录
-  const toolCalls: ToolCallRecord[] = []
+  // 等待流结束并检测模型调用错误（AI SDK 懒执行：401/网络错误在 await steps 时抛出）
+  // 工具调用记录不再从 steps 解析（v7 的 toolCalls 不含 result）——用 execute 端收集的 executedToolCalls
   let modelError: Error | null = null
   try {
-    const steps = await result.steps
-    for (const s of steps) {
-      const calls = await s.toolCalls
-      for (const tc of calls) {
-        const anyTc = tc as unknown as {
-          toolName: string
-          input: unknown
-          result?: { content?: unknown }
-        }
-        const content = anyTc.result?.content
-        const text = Array.isArray(content)
-          ? content.map((c) => (c as { text?: string }).text ?? '').join('\n')
-          : String(content ?? '')
-        toolCalls.push({
-          id: uid(),
-          name: anyTc.toolName,
-          input: anyTc.input,
-          output: text,
-          status: 'success',
-          startedAt: 0,
-          durationMs: 0,
-        })
-      }
-    }
+    await result.steps
   } catch (err) {
     // 模型调用失败（401 无 key / 网络 / 模型失效等）发生在这里（AI SDK 懒执行）。
     // 不能吞掉：否则前端只会收到一条空消息、没有任何错误提示。
@@ -447,7 +441,7 @@ export async function runTurn(
     id: uid(),
     role: 'assistant',
     content: assistantText,
-    toolCalls: toolCalls.length ? toolCalls : undefined,
+    toolCalls: executedToolCalls.length ? executedToolCalls : undefined,
     tokens: { input: inputTokens, output: outputTokens },
     createdAt: Date.now(),
     segments: segments.length ? segments : undefined,

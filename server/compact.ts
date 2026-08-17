@@ -1,12 +1,62 @@
 // 上下文压缩：真实 summarization（LLM 总结旧消息）+ 自动触发策略
 import { generateText } from 'ai'
 import type { Agent, Message, Session } from './types.js'
-import { createModel } from './models.js'
+import { createModel, resolveModel } from './models.js'
 
 // 策略参数（可用环境变量覆盖）
-export const COMPACT_MIN_MESSAGES = Number(process.env.NOVA_AGENT_COMPACT_MIN ?? 40) // 超过该条数才压缩
+export const COMPACT_MIN_MESSAGES = Number(process.env.NOVA_AGENT_COMPACT_MIN ?? 40) // 消息数兜底：超过该条数强制压缩（与 token 阈值双条件）
 export const COMPACT_KEEP = Number(process.env.NOVA_AGENT_COMPACT_KEEP ?? 20) // 保留最近 N 条消息
 const SUMMARY_MAX_CHARS = 2000 // 摘要长度上限（字符）
+const DEFAULT_CONTEXT_WINDOW = 1_000_000 // 模型上下文缺省值（主流模型普遍 1M）
+// 自动压缩阈值：上下文用量的百分比（成熟项目做法：接近上限才压；Claude Code 默认 ~95%）
+// 可用 NOVA_AGENT_COMPACT_PCT 覆盖（1-100）
+export const COMPACT_PCT = Math.min(100, Math.max(1, Number(process.env.NOVA_AGENT_COMPACT_PCT ?? 90)))
+
+// 会话当前上下文占用（真实计数优先）：
+// 最后一条带 tokens 的 assistant 消息的 input 是"那次请求的完整输入"（API 真实计数，含全部历史），
+// 以其为基准 + 其后新增消息的估算
+export function contextUsage(messages: Array<{ role: string; content: string; tokens?: { input?: number; output?: number } }>): number {
+  let base = 0
+  let baseIdx = -1
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.tokens && (m.tokens.input ?? 0) > 0) {
+      base = m.tokens.input ?? 0
+      baseIdx = i
+    }
+  }
+  let used = base
+  for (let i = baseIdx + 1; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.tokens) used += (m.tokens.output ?? 0)
+    else used += estimateTokens(m.content)
+  }
+  return used
+}
+
+// 文本 token 估算：中文约 0.7 token/字，其他约 0.25 token/字符（user 消息无真实计数）
+export function estimateTokens(text: string): number {
+  let cn = 0
+  let other = 0
+  for (const ch of text) {
+    if (/[\u4e00-\u9fff]/.test(ch)) cn++
+    else other++
+  }
+  return Math.ceil(cn * 0.7 + other / 4)
+}
+
+// 上下文窗口兜底：非法值（0/负数/非数字）回退缺省，防止进度条/压缩阈值异常
+export function sanitizeContextWindow(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_CONTEXT_WINDOW
+}
+
+// 当前模型的上下文窗口（models.json 注册表内置；未配/非法 → 缺省 1M）
+export function contextWindowFor(model: string): number {
+  const resolved = resolveModel(model)
+  const entry = resolved?.provider.models.find((m) => m.id === resolved.modelId)
+  return sanitizeContextWindow(entry?.contextWindow)
+}
 
 export interface CompactResult {
   summary: string
@@ -47,9 +97,12 @@ export async function summarizeMessages(messages: Message[], model: string): Pro
   return summary.length > SUMMARY_MAX_CHARS ? summary.slice(0, SUMMARY_MAX_CHARS) : summary
 }
 
-// 判断是否需要压缩
-export function shouldCompact(session: Session): boolean {
-  return session.messages.length > COMPACT_MIN_MESSAGES
+// 判断是否需要压缩：消息条数超限（保守兜底）或 当前上下文占用超过窗口 × COMPACT_PCT%
+export function shouldCompact(session: Session, model?: string): boolean {
+  if (session.messages.length > COMPACT_MIN_MESSAGES) return true
+  if (!model || !session.messages.length) return false
+  const window = contextWindowFor(model)
+  return contextUsage(session.messages) > (window * COMPACT_PCT) / 100
 }
 
 // 执行压缩：总结最早的消息（保留最近 KEEP 条），摘要存 session.summary

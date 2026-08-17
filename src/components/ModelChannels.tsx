@@ -32,10 +32,11 @@ interface CustomForm {
   name: string
   baseUrl: string
   apiKey: string
+  contextWindowText: string
   modelsText: string
 }
 
-const EMPTY_FORM: CustomForm = { id: '', name: '', baseUrl: '', apiKey: '', modelsText: '' }
+const EMPTY_FORM: CustomForm = { id: '', name: '', baseUrl: '', apiKey: '', contextWindowText: '', modelsText: '' }
 
 export default function ModelChannels() {
   const customProviders = useMainStore((s) => s.customProviders)
@@ -84,13 +85,14 @@ export default function ModelChannels() {
   }
 
   // 列表「编辑」：强制进入编辑模式（填充该供应商，ID 锁定）
-  const openEdit = (p: { id: string; name: string; baseUrl: string; models: Array<{ id: string; name?: string }> }) => {
+  const openEdit = (p: { id: string; name: string; baseUrl: string; contextWindow?: number; models: Array<{ id: string; name?: string }> }) => {
     setMode('edit')
     setForm({
       id: p.id,
       name: p.name,
       baseUrl: p.baseUrl,
       apiKey: '',
+      contextWindowText: p.contextWindow ? String(p.contextWindow) : '',
       modelsText: p.models.map((m) => (m.name ? `${m.id}:${m.name}` : m.id)).join('\n'),
     })
     setFormError('')
@@ -124,6 +126,9 @@ export default function ModelChannels() {
         id: form.id.trim(),
         name: form.name.trim(),
         baseUrl: form.baseUrl.trim(),
+        contextWindow: form.contextWindowText.trim() && Number.isFinite(Number(form.contextWindowText)) && Number(form.contextWindowText) > 0
+          ? Math.floor(Number(form.contextWindowText))
+          : undefined,
         models: modelsParsed,
       })
       // 表单里填了 key 就一并保存（空 key = 删除，编辑场景留空则不动）
@@ -306,6 +311,17 @@ export default function ModelChannels() {
                 <Label className="text-[11px]">API Key（可选，编辑时留空 = 不修改）</Label>
                 <Input type="password" autoComplete="new-password" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="粘贴该平台的 API Key" className="h-8.5 font-mono text-xs" />
               </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-[11px]">上下文窗口（token，可选，缺省 1M；如 GLM-5.2 填 1000000）</Label>
+              <Input
+                value={form.contextWindowText}
+                onChange={(e) => setForm({ ...form, contextWindowText: e.target.value })}
+                placeholder="1000000"
+                autoComplete="off"
+                inputMode="numeric"
+                className="h-8.5 max-w-[200px] font-mono text-xs"
+              />
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-[11px]">模型列表（每行一个，写模型 id，支持 "id:显示名"）</Label>
