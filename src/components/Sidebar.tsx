@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings, Brain, Cable, X,
+  MessageSquare, Plus, Sparkles, Bot, Clock, Wrench, ChevronRight, Pencil, Trash2, Cpu, Settings, Brain, Cable, X, Download,
 } from 'lucide-react'
 import { useMainStore } from '../store'
 import { api } from '../api'
 import { cn } from '../lib/utils'
+import { downloadSessionMarkdown, downloadSessionJson } from '../lib/sessionExport'
 import type { Agent, Session } from '../types'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import SettingsModal from './SettingsModal'
 
 interface SearchResult {
@@ -89,6 +91,18 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
   const startRename = (session: Session) => {
     setEditingSessionId(session.id)
     setRenameDraft(session.title)
+  }
+
+  // 导出：按 id 拉取完整会话（含全部消息/工具调用）后纯前端生成并下载
+  const exportSession = async (session: Session, format: 'markdown' | 'json') => {
+    try {
+      const full = await api.getSession(session.id)
+      const agentName = agents.find((a) => a.id === full.agentId)?.name
+      if (format === 'markdown') downloadSessionMarkdown(full, agentName)
+      else downloadSessionJson(full, agentName)
+    } catch (err) {
+      console.error('导出会话失败', err)
+    }
   }
   const saveRename = async (sessionId: string) => {
     if (!editingSessionId) return
@@ -263,6 +277,21 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
                 )}
                 {editingSessionId !== session.id && (
                   <span className="hidden gap-0.5 group-hover:flex">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="rounded-md p-1 text-muted-foreground hover:bg-primary/15 hover:text-primary" title="导出会话" onClick={(e) => e.stopPropagation()}>
+                          <Download className="h-3 w-3" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" side="right" sideOffset={4}>
+                        <DropdownMenuItem onSelect={() => void exportSession(session, 'markdown')}>
+                          <Download className="h-3.5 w-3.5" /> 导出 Markdown
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void exportSession(session, 'json')}>
+                          <Download className="h-3.5 w-3.5" /> 导出 JSON（完整数据）
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <button className="rounded-md p-1 text-muted-foreground hover:bg-primary/15 hover:text-primary" title="重命名" onClick={(e) => { e.stopPropagation(); startRename(session) }}>
                       <Pencil className="h-3 w-3" />
                     </button>
