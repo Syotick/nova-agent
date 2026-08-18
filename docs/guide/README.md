@@ -11,7 +11,7 @@
 | [03](03-terminal.md) | `server/terminal.ts` | run_command：agent 的双手 + 进程生命周期（含 Windows 平台坑） | ✅ |
 | [04](04-skills.md) | `server/skills.ts` | 技能系统：SKILL.md 两级加载 | ✅ |
 | [05](05-memory.md) | `server/memory.ts` | 跨会话记忆：LRU + 去重合并 | ✅ |
-| 06 | `server/compact.ts` | 上下文压缩：token 感知 + 兜底 | 规划中 |
+| [06](06-compact.md) | `server/compact.ts` | 上下文压缩：token 感知 + 占兜底 | ✅ |
 | 07 | `server/workspace.ts` | 工作区：agent 的文件权限边界 | 规划中 |
 | 08 | `server/vibe.ts` | Vibe 自治循环：目标驱动多轮执行 | 规划中 |
 
