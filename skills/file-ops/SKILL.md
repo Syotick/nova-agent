@@ -11,4 +11,4 @@ when_to_use: 读文件、写文件、列目录、查看项目结构
 - `search_files`：按模式搜索文件
 - `get_file_info`：获取文件元信息
 
-注意：工作区根目录是 `D:\Data\deepseekharness_project`，涉及该目录的文件操作使用此技能。
+注意：filesystem 工具的根目录是当前配置的工作区（默认项目内 `workspace/`，可在输入框工具栏的工作区入口处查看当前路径），涉及该目录的文件操作使用此技能。
