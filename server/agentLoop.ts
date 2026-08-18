@@ -12,6 +12,7 @@ import { builtinTools } from './builtinTools.js'
 import { newId } from './store.js'
 import { searchMemories, addMemory, listMemories, touchMemories } from './memory.js'
 import { executeCommand, killSessionProcesses } from './terminal.js'
+import { executeGlob } from './glob.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
 // （可环境变量覆盖：NOVA_AGENT_MAX_STEPS）
@@ -253,6 +254,52 @@ export async function runTurn(
         executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
         return { content: `Error: 子任务调度失败（${(err as Error).message}）`, isError: true }
+      }
+    },
+  })
+
+  // 内置工具：glob（文件名模式匹配，Claude Code 六大核心编程工具之一——所有 Agent 自动拥有）
+  // 在"要改哪些文件/项目里有哪些文件"时比 search_files 更合适（按文件名而非内容）
+  tools['glob'] = tool({
+    description:
+      '按文件名模式在工作区中查找文件，返回相对工作区的路径列表。' +
+      '支持 glob 语法：*（一段内任意字符）、**（跨任意层目录）、?（单个字符），如 "**/*.ts"、"src/**/*.md"、"package.json"。' +
+      '适合先了解项目结构/定位要修改的文件（按文件名），搜索文件内容请用 search_files。',
+    inputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'glob 文件名模式（如 **/*.ts）' },
+        cwd: { type: 'string', description: '相对工作区的搜索起点（可选；默认工作区根）' },
+      },
+      required: ['pattern'],
+    }),
+    execute: async (args) => {
+      const record: ToolCallRecord = {
+        id: uid(),
+        name: 'glob',
+        input: args,
+        output: '',
+        status: 'running',
+        startedAt: Date.now(),
+        durationMs: 0,
+      }
+      segments.push({ kind: 'tool', call: record })
+      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
+      try {
+        const res = executeGlob(args as never)
+        record.output = res.content
+        record.status = res.isError ? 'error' : 'success'
+        record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return res
+      } catch (err) {
+        record.output = `ERROR: ${(err as Error).message}`
+        record.status = 'error'
+        record.durationMs = Date.now() - record.startedAt
+        executedToolCalls.push(record)
+        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
+        return { content: `Error: 匹配失败（${(err as Error).message}）`, isError: true }
       }
     },
   })
