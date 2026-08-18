@@ -8,7 +8,7 @@
 |---|---|---|---|
 | [01](01-agent-loop.md) | `server/agentLoop.ts` | Agent 循环：一个 agent 怎么转起来 | ✅ |
 | [02](02-mcp.md) | `server/mcp.ts` | MCP 客户端：怎么把外部工具变成 agent 的手 | ✅ |
-| 03 | `server/terminal.ts` | run_command：agent 的双手 + 进程生命周期 | 规划中 |
+| [03](03-terminal.md) | `server/terminal.ts` | run_command：agent 的双手 + 进程生命周期（含 Windows 平台坑） | ✅ |
 | 04 | `server/skills.ts` | 技能系统：SKILL.md 两级加载 | 规划中 |
 | 05 | `server/memory.ts` | 跨会话记忆：LRU + 去重合并 | 规划中 |
 | 06 | `server/compact.ts` | 上下文压缩：token 感知 + 兜底 | 规划中 |
