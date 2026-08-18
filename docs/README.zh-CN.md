@@ -4,7 +4,7 @@
 
 > Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离，都在一个小代码库里。
 
-[English README](../README.md)
+[English README](../README.md) ｜ [📖 读代码指南（Agent Loop 走读）](./guide/01-agent-loop.md)
 
 ---
 
