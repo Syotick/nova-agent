@@ -30,6 +30,7 @@
 - ✅ **中断 / 继续**：流式期间可 Stop，已生成内容保留
 - ✅ **上下文压缩**：token 感知。上下文占用接近模型窗口上限时（默认 90%，真实 API 计数），LLM 自动把较早历史总结为摘要（注入 system prompt）并保留最近 20 条，长对话不会溢出
 - ✅ **终端执行（Codex 模式）**：`run_command` 在工作区执行 shell 命令（npm / git / node / python…），捕获输出、超时自动终止、中断时清理整个进程树。读代码、改代码、跑构建/测试验证、启动项目，都能在对话里完成
+- ✅ **六大核心编程工具（对齐 Claude Code）**：`read_file` / `edit_file` / `write_file`（filesystem MCP）+ `search_files`（grep）+ `glob`（文件名模式匹配，内置）+ `run_command`（bash）——让 Agent 真正能改代码的工具集
 - ✅ **Vibe 自治循环**：输入目标后点 Vibe（🚀 按钮）。Agent 自动规划、实现、验证、自愈，多轮循环直到收敛（以 `[DONE]` 信号为准），带轮数/时长预算，连续相同失败自动熔断止损；中断时清理运行中的进程
 
 ### 多 Agent 管理

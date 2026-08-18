@@ -30,6 +30,7 @@
 - ✅ **Stop & resume**: Stop button during streaming; generated content is preserved
 - ✅ **Context compaction**: when a session exceeds 40 messages, earlier history is summarized by the LLM (injected into the system prompt), keeping the last 20, so long conversations never overflow
 - ✅ **Terminal (Codex mode)**: `run_command` runs shell commands in the workspace (npm / git / node / python...) with output capture, timeout auto-kill and whole process-tree cleanup on interrupt. Read code, edit code, verify with builds/tests, start the project — all from chat.
+- ✅ **Six core coding tools (Claude Code compatible)**: `read_file` / `edit_file` / `write_file` (filesystem MCP), `search_files` (grep), `glob` (filename pattern matching, built-in), and `run_command` (bash) — the toolset that lets an agent actually edit a codebase.
 - ✅ **Vibe loop (autonomous goals)**: type a goal and press Vibe (🚀 in the UI). The agent plans, implements, verifies and self-heals across multiple rounds until it converges (signalled by `[DONE]`), bounded by round/time budgets and a circuit breaker that stops on repeated identical failures. Interrupting cleans up running processes.
 
 ### Multi-Agent Management
