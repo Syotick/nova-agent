@@ -114,7 +114,7 @@
 .markdown-body img { max-width: 100%; border-radius: 10px; }
 
 /* 流式光标 */
-.cursor { display: inline-block; width: 2px; height: 1em; background: hsl(231 92% 66%); vertical-align: text-bottom; animation: blink 0.9s infinite; }
+
 
 /* 去除浏览器自动填充（autofill）的默认底色与文字变色 */
 input:-webkit-autofill,
