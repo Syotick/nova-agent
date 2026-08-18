@@ -33,7 +33,14 @@ export default function MessageList() {
   const currentToolCalls = useMainStore((s) => s.currentToolCalls)
   const currentSegments = useMainStore((s) => s.currentSegments)
   const [visibleLimit, setVisibleLimit] = useState(100)
-  const listRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)  // 思考计时：流式且尚无可见输出（思考/等工具阶段）时每秒累计；有输出或结束即归零
+  const [thinkSeconds, setThinkSeconds] = useState(0)
+  useEffect(() => {
+    const active = streaming && !currentText && currentSegments.length === 0
+    if (!active) { setThinkSeconds(0); return }
+    const t = setInterval(() => setThinkSeconds((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [streaming, currentText, currentSegments])
 
   const currentSession = sessions.find((s) => s.id === currentSessionId)
   const messages = currentSession?.messages ?? []
@@ -159,7 +166,8 @@ export default function MessageList() {
                     dangerouslySetInnerHTML={{
                       __html: currentText
                         ? renderStreaming(currentText)
-                        : '<span class="text-muted-foreground text-[13px]">思考中</span><span class="inline-flex gap-0.5 ml-1.5 align-middle">' +
+                        : '<span class="text-muted-foreground text-[13px]">思考中 · <span class="text-primary font-medium tabular-nums">' +
+                          String(thinkSeconds) + '</span>s</span><span class="inline-flex gap-0.5 ml-1.5 align-middle">' +
                           '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0s"></i>' +
                           '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.15s"></i>' +
                           '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.3s"></i></span>',

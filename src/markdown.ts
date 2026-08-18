@@ -23,11 +23,11 @@ export function renderMarkdown(text: string): string {
   return md.render(typeof text === 'string' ? text : String(text ?? ''))
 }
 
-// 流式中间状态：转义 HTML 防止注入，但不完整标记保持原样，尾部附打字光标
+// 流式中间状态：转义 HTML 防止注入，但不完整标记保持原样（不渲染原始 HTML）
 export function renderStreaming(text: string): string {
   const escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-  return md.render(escaped) + '<span class="cursor"></span>'
+  return md.render(escaped)
 }
