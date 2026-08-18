@@ -10,7 +10,7 @@ import { shouldCompact, compactSession } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools } from './builtinTools.js'
 import { newId } from './store.js'
-import { searchMemories, addMemory, listMemories, touchMemories } from './memory.js'
+import { searchMemories, addMemory, listMemories, touchMemories, loadProjectMemory } from './memory.js'
 import { executeCommand, killSessionProcesses } from './terminal.js'
 import { executeGlob } from './glob.js'
 
@@ -407,6 +407,11 @@ export async function runTurn(
   })
 
   // system prompt = persona + 技能注入 + 历史摘要（压缩后存在）+ 执行约束 + 工具选择策略
+  // 项目记忆（AGENTS.md：项目共享约定 + AGENTS.local.md 个人私有，见 memory.ts）
+  const projectMemory = loadProjectMemory()
+  const projectMemoryBlock = projectMemory
+    ? `\n\n---\n\n# 项目说明（来自工作区的 AGENTS.md，遵守之）\n${projectMemory}`
+    : ''
   const summaryBlock = session.summary
     ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
     : ''
@@ -445,7 +450,7 @@ export async function runTurn(
 - 用户明确表达个人偏好、项目事实或长期约定时，调用 remember 工具记住（一句话，简洁完整）。
 - 不要记住临时性内容（本次任务细节、一次性指令）；每轮最多调用 1-2 次。
 - 回答时优先参考 system prompt 中注入的长期记忆；与当前对话冲突时以当前对话为准。`
-  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${stepBudget}`
+  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}`
 
   // 历史消息（AI SDK 格式）
   const history = session.messages.slice(0, -1).map((m) => ({

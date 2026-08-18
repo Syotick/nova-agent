@@ -8,6 +8,9 @@
 //   删除/编辑：UI 管理
 import { db } from './db.js'
 import { newId } from './store.js'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { getWorkspacePath } from './workspace.js'
 
 export interface Memory {
   id: string
@@ -41,6 +44,27 @@ export function listMemories(agentId: string): Memory[] {
     'SELECT * FROM memories WHERE agent_id = ? ORDER BY created_at DESC',
   ).all(agentId) as Record<string, unknown>[]
   return rows.map(rowToMemory)
+}
+
+// ---------- 项目记忆文件（AGENTS.md，开放标准） ----------
+// AGENTS.md 是 OpenAI/GitHub 推进的"给 agent 看的项目说明"文件约定（Claude Code / Codex 等多家读取），
+// 无品牌归属、可跨工具互操作。语义：项目的领域约定、架构决策、常用命令——agent 每轮都读到。
+// 两个层级：
+//   AGENTS.md        项目共享约定（入库，git 管理）
+//   AGENTS.local.md  个人私有说明（不入库，见 .gitignore）——仅本机生效
+export function loadProjectMemory(customDir?: string): string {
+  const ws = customDir ?? getWorkspacePath()
+  const parts: string[] = []
+  for (const file of ['AGENTS.md', 'AGENTS.local.md']) {
+    try {
+      const p = join(ws, file)
+      if (existsSync(p)) {
+        const t = readFileSync(p, 'utf8').trim()
+        if (t) parts.push(t)
+      }
+    } catch { /* ignore（文件损坏按不存在处理） */ }
+  }
+  return parts.join('\n\n')
 }
 
 // ---------- 相似度（词面版本：bigram Jaccard，中文实词多为双字词） ----------
@@ -116,7 +140,43 @@ export function addMemory(
   db.prepare(
     'INSERT INTO memories (id, agent_id, content, source, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)',
   ).run(memory.id, memory.agentId, memory.content, memory.source, memory.createdAt, memory.lastUsedAt)
+
+  // 节流触发存量归并（防每次写入都跑全表 O(n²)）
+  if (Date.now() - lastConsolidateAt > CONSOLIDATE_INTERVAL_MS) {
+    lastConsolidateAt = Date.now()
+    consolidateMemories(agentId)
+  }
   return { memory, merged: false }
+}
+
+// 存量归并：两两"高相似"的记忆 → 保留较新一条、删重复（纯本地、零 LLM 成本）。
+// 写入时的去重合并只管"新写的 vs 旧的"；存量归并管"历史里积存下来的近似条目"，
+// 是记忆系统的第二轮自我维护（防"同一个事实被不同表述存了 N 次"）。
+let lastConsolidateAt = 0
+const CONSOLIDATE_INTERVAL_MS = 5 * 60_000
+
+export function consolidateMemories(agentId: string): number {
+  const rows = db.prepare(
+    'SELECT id, agent_id, content, source, created_at, last_used_at FROM memories WHERE agent_id = ? ORDER BY created_at DESC',
+  ).all(agentId) as Record<string, unknown>[]
+  if (rows.length < 2) return 0
+  const list: Array<Memory | null> = rows.map(rowToMemory)
+  let removed = 0
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i]) continue
+    for (let j = i + 1; j < list.length; j++) {
+      if (!list[j]) continue
+      if (similarity(list[i]!.content, list[j]!.content) >= MEMORY_MERGE_THRESHOLD) {
+        // 保留较新（created_at 大），删较旧
+        const keepIdx = (list[i]!.createdAt >= list[j]!.createdAt) ? i : j
+        const dropIdx = keepIdx === i ? j : i
+        db.prepare('DELETE FROM memories WHERE id = ?').run(list[dropIdx]!.id)
+        list[dropIdx] = null
+        removed++
+      }
+    }
+  }
+  return removed
 }
 
 // 编辑（UI）：更新内容，同样走长度校验；不做相似合并（用户显式编辑）

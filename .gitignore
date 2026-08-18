@@ -23,6 +23,9 @@ workspace/
 .env
 .env.*
 
+# 个人私有项目说明（AGENTS.local.md 仅本机生效，不入库；与 AGENTS.md 开放约定配套）
+AGENTS.local.md
+
 # playwright 调试缓存
 .playwright-mcp/
 playwright-report/

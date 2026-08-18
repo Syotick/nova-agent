@@ -1,9 +1,12 @@
 // 跨会话记忆单元测试
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { db } from '../db.js'
 import {
-  addMemory, deleteMemory, listMemories, searchMemories, updateMemory,
-  similarity, MEMORY_LIMIT, MEMORY_MAX_LENGTH,
+  addMemory, deleteMemory, listMemories, searchMemories, updateMemory, consolidateMemories,
+  similarity, loadProjectMemory, MEMORY_LIMIT, MEMORY_MAX_LENGTH,
 } from '../memory.js'
 
 // 用独立 agentId 隔离测试数据（memories 外键引用 agents，需先建测试 agent）
@@ -113,5 +116,64 @@ describe('memory 检索', () => {
     addMemory(TEST_AGENT, '测试内容', 'manual')
     expect(searchMemories(TEST_AGENT, '')).toHaveLength(0)
     expect(searchMemories(TEST_AGENT, 'a b c')).toHaveLength(0)
+  })
+})
+
+describe('memory 存量归并（consolidateMemories）', () => {
+  it('高相似历史条目：归并保留较新一条', () => {
+    // 直接插入两条近似内容（绕过写入时合并，模拟历史积压）
+    const now = Date.now()
+    const ins = db.prepare(
+      'INSERT INTO memories (id, agent_id, content, source, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    ins.run('mem_c1', TEST_AGENT, '项目使用 Express 框架和 SQLite 数据库', 'auto', now, now)
+    ins.run('mem_c2', TEST_AGENT, '项目使用 Express 框架和 SQLite 数据库，路由模块化', 'auto', now + 100, now + 100)
+
+    const removed = consolidateMemories(TEST_AGENT)
+    expect(removed).toBe(1)
+    const list = listMemories(TEST_AGENT)
+    expect(list).toHaveLength(1)
+    expect(list[0].content).toContain('路由模块化') // 保留较新（细节更全）
+  })
+
+  it('无近似条目：不做删除', () => {
+    addMemory(TEST_AGENT, '用户喜欢简洁的回答', 'manual')
+    addMemory(TEST_AGENT, '项目使用 Express + SQLite', 'auto')
+    addMemory(TEST_AGENT, '部署目标是单机', 'auto')
+    expect(consolidateMemories(TEST_AGENT)).toBe(0)
+    expect(listMemories(TEST_AGENT)).toHaveLength(3)
+  })
+})
+
+describe('memory 项目记忆文件（AGENTS.md）', () => {
+  it('无文件返回空；存在则读取；AGENTS.local.md 追加', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nova-agents-test-'))
+    try {
+      // 空目录 → ''
+      expect(loadProjectMemory(dir)).toBe('')
+
+      // AGENTS.md → 内容
+      writeFileSync(join(dir, 'AGENTS.md'), '项目用 Express + SQLite\n前端 React', 'utf8')
+      const one = loadProjectMemory(dir)
+      expect(one).toContain('项目用 Express + SQLite')
+
+      // AGENTS.local.md → 追加在后
+      writeFileSync(join(dir, 'AGENTS.local.md'), '本机：用 127.0.0.1 调试', 'utf8')
+      const two = loadProjectMemory(dir)
+      expect(two).toContain('本机：用 127.0.0.1 调试')
+      expect(two.indexOf('本机')).toBeGreaterThan(two.indexOf('前端 React'))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('文件损坏按不存在处理（不抛错）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'nova-agents-test-'))
+    try {
+      mkdirSync(join(dir, 'AGENTS.md')) // 目录冒充文件 → 读抛错 → 返回 ''
+      expect(loadProjectMemory(dir)).toBe('')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
