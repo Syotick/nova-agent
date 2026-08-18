@@ -2,7 +2,6 @@ import { Scissors, Bot, Rocket } from 'lucide-react'
 import { useMainStore } from '../store'
 import MessageList from './MessageList'
 import Composer from './Composer'
-import WorkspacePicker from './WorkspacePicker'
 
 export default function ChatView() {
   const sessions = useMainStore((s) => s.sessions)
@@ -20,8 +19,6 @@ export default function ChatView() {
       <div className="flex min-h-0 flex-1 flex-col">
         {currentSession ? (
           <>
-            {/* 工作区（常驻：显示当前目录，点击可切换） */}
-            <WorkspacePicker />
             {/* Vibe 运行指示 */}
             {vibeRound && (
               <div className="mx-6 mt-2.5 flex flex-none items-center gap-2 rounded-lg border border-primary/25 bg-primary/8 px-3.5 py-2 text-xs text-primary animate-fade-in">

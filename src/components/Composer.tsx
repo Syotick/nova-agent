@@ -6,6 +6,7 @@ import { cn, fmtSize } from '../lib/utils'
 import type { Attachment, ReasoningOption } from '../types'
 import ModelPicker from './ModelPicker'
 import ContextUsageBar from './ContextUsageBar'
+import WorkspacePicker from './WorkspacePicker'
 
 // 思考模式基础选项（所有 DeepSeek 模型都有）：thinking 开关，纯英文
 const BASE_REASONING: Array<{ value: string; label: string; option: ReasoningOption }> = [
@@ -138,6 +139,7 @@ export default function Composer() {
 
         {/* 工具栏：模型切换 + 思考程度（输入框上方，与同类产品一致） */}
         <div className="flex items-center gap-2 px-1">
+          <WorkspacePicker />
           <ModelPicker />
           <ContextUsageBar />
           <div
