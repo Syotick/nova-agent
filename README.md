@@ -4,7 +4,7 @@
 
 > Agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, sandboxed security — all in one small codebase.
 
-[中文文档](./docs/README.zh-CN.md)
+[中文文档](./docs/README.zh-CN.md) ｜ [Code Walkthrough: Agent Loop (中文)](./docs/guide/01-agent-loop.md)
 
 ---
 
