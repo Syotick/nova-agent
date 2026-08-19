@@ -11,6 +11,16 @@ import type { Agent } from '../types'
 
 const PALETTE = ['#4d6bfe', '#8b7bff', '#38bdf8', '#34d399', '#fbbf24', '#f87171', '#f472b6', '#22d3ee']
 
+// 内置工具勾选清单（与后端 BUILTIN_TOOL_IDS 对应）
+const BUILTIN_TOOLS: Array<{ id: string; label: string; desc: string }> = [
+  { id: 'web_search', label: '搜索', desc: '在线搜索' },
+  { id: 'run_command', label: '终端', desc: '执行命令/启动项目' },
+  { id: 'glob', label: '文件匹配', desc: '按文件名找文件' },
+  { id: 'remember', label: '记忆', desc: '跨会话记忆' },
+  { id: 'subagent', label: '子代理', desc: '任务分发' },
+]
+const ALL_BUILTIN = BUILTIN_TOOLS.map((x) => x.id)
+
 interface Props {
   visible: boolean
   editingAgent: Agent | null
@@ -23,12 +33,13 @@ interface FormState {
   persona: string
   mcpServerIds: string[]
   skillIds: string[]
+  builtinTools: string[]
   color: string
 }
 
 export default function AgentConfigModal({ visible, editingAgent, onClose }: Props) {
   const store = useMainStore()
-  const [form, setForm] = useState<FormState>({ name: '', model: '', persona: '', mcpServerIds: [], skillIds: [], color: PALETTE[0] })
+  const [form, setForm] = useState<FormState>({ name: '', model: '', persona: '', mcpServerIds: [], skillIds: [], builtinTools: [...ALL_BUILTIN], color: PALETTE[0] })
   const [formProvider, setFormProvider] = useState('')
   const [formModelId, setFormModelId] = useState('')
   const [skillSearch, setSkillSearch] = useState('')
@@ -55,10 +66,11 @@ export default function AgentConfigModal({ visible, editingAgent, onClose }: Pro
         persona: editingAgent.persona,
         mcpServerIds: [...editingAgent.mcpServerIds],
         skillIds: [...editingAgent.skillIds],
+        builtinTools: editingAgent.builtinTools?.length ? [...editingAgent.builtinTools] : [...ALL_BUILTIN],
         color: editingAgent.color,
       })
     } else {
-      setForm({ name: '', model: store.defaultModelId(), persona: 'You are a helpful assistant. 用中文回答。', mcpServerIds: [], skillIds: [], color: PALETTE[Math.floor(Math.random() * PALETTE.length)] })
+      setForm({ name: '', model: store.defaultModelId(), persona: 'You are a helpful assistant. 用中文回答。', mcpServerIds: [], skillIds: [], builtinTools: [...ALL_BUILTIN], color: PALETTE[Math.floor(Math.random() * PALETTE.length)] })
     }
   }, [visible, editingAgent])
 
@@ -195,6 +207,39 @@ export default function AgentConfigModal({ visible, editingAgent, onClose }: Pro
                 )
               })}
               {!store.mcpServers.length && <div className="text-xs text-muted-foreground">暂无 MCP 服务器</div>}
+            </div>
+          </div>
+
+          {/* 内置工具（默认全选；取消勾选 = 该 Agent 不可用对应工具，作用于所有会话） */}
+          <div className="flex flex-col gap-2">
+            <Label>内置工具</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {BUILTIN_TOOLS.map((tool) => {
+                const checked = form.builtinTools.includes(tool.id)
+                return (
+                  <label
+                    key={tool.id}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-[13px] transition-all',
+                      checked ? 'border-primary/35 bg-primary/10' : 'border-border bg-muted/30 hover:bg-muted',
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        setForm({
+                          ...form,
+                          builtinTools: v
+                            ? [...form.builtinTools, tool.id]
+                            : form.builtinTools.filter((x) => x !== tool.id),
+                        })
+                      }}
+                    />
+                    <span className="font-medium">{tool.label}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">{tool.desc}</span>
+                  </label>
+                )
+              })}
             </div>
           </div>
 

@@ -24,6 +24,8 @@ export interface Agent {
   model: string
   mcpServerIds: string[]
   skillIds: string[]
+  /** 可用的内置工具 id（空数组/缺失 = 全部可用，向后兼容）。内置工具：web_search / run_command / glob / remember / subagent */
+  builtinTools?: string[]
   color: string
   createdAt: number
 }

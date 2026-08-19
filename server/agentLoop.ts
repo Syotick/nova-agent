@@ -8,7 +8,7 @@ import { listToolsFor, callMcpTool } from './mcp.js'
 import { injectSkills } from './skills.js'
 import { shouldCompact, compactSession } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
-import { builtinTools } from './builtinTools.js'
+import { builtinTools, shouldRegisterBuiltin } from './builtinTools.js'
 import { newId } from './store.js'
 import { searchMemories, addMemory, listMemories, touchMemories, loadProjectMemory } from './memory.js'
 import { executeCommand, killSessionProcesses } from './terminal.js'
@@ -125,7 +125,7 @@ export async function runTurn(
   }
 
   // 内置工具：web_search（所有 Agent 自动拥有）
-  for (const bt of builtinTools) {
+  if (shouldRegisterBuiltin(agent.builtinTools, 'web_search')) for (const bt of builtinTools) {
     tools[bt.name] = tool({
       description: bt.description,
       inputSchema: jsonSchema(bt.inputSchema),
@@ -147,7 +147,7 @@ export async function runTurn(
   // 内置工具：subagent（子 Agent 编排，所有 Agent 自动拥有）
   // 子任务 = 内存临时会话 + 完整独立 loop（无 SSE）；只把最终文本/结构化错误交回主 Agent。
   // 失败策略：返回原因 + 部分产出，由主 Agent 决策，不盲目重试、禁止编造结果。
-  tools['subagent'] = tool({
+  if (shouldRegisterBuiltin(agent.builtinTools, 'subagent')) tools['subagent'] = tool({
     description:
       '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），完成后返回其最终结论。' +
       '适合：多个方向并行探索、独立审查、把大任务拆成小任务。task 必须是自包含的描述（目标+约束+交付格式）。' +
@@ -260,7 +260,7 @@ export async function runTurn(
 
   // 内置工具：glob（文件名模式匹配，Claude Code 六大核心编程工具之一——所有 Agent 自动拥有）
   // 在"要改哪些文件/项目里有哪些文件"时比 search_files 更合适（按文件名而非内容）
-  tools['glob'] = tool({
+  if (shouldRegisterBuiltin(agent.builtinTools, 'glob')) tools['glob'] = tool({
     description:
       '按文件名模式在工作区中查找文件，返回相对工作区的路径列表。' +
       '支持 glob 语法：*（一段内任意字符）、**（跨任意层目录）、?（单个字符），如 "**/*.ts"、"src/**/*.md"、"package.json"。' +
@@ -307,7 +307,7 @@ export async function runTurn(
   // 内置工具：run_command（终端执行，Codex 模式核心——所有 Agent 自动拥有）
   // 工作区即项目：命令默认在工作区根执行，可指定子目录；超时自动终止进程树；
   // 会话中断（用户停止/连接断开）时由 abortRun -> killSessionProcesses 清理
-  tools['run_command'] = tool({
+  if (shouldRegisterBuiltin(agent.builtinTools, 'run_command')) tools['run_command'] = tool({
     description:
       '在工作区（你的项目目录）执行 shell 命令（npm / git / node 等），返回命令输出。' +
       '改完代码后用这个工具跑构建/测试/启动（如 npm run build / npm test / npm run dev）验证你的改动。' +
@@ -354,7 +354,7 @@ export async function runTurn(
 
   // 内置工具：remember（跨会话记忆，所有 Agent 自动拥有）
   // 模型在对话中判断"用户明确表达的偏好/重要事实"时调用；注入到所有后续会话的 system prompt
-  tools['remember'] = tool({
+  if (shouldRegisterBuiltin(agent.builtinTools, 'remember')) tools['remember'] = tool({
     description:
       '把用户明确表达的、值得长期记住的信息（个人偏好、项目事实、长期约定等）存入跨会话记忆。' +
       '之后所有会话都会自动参考这些记忆。仅在用户明确表达、且对未来对话有长期价值时使用，不要滥用（不要记住临时性内容）。',

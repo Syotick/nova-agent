@@ -35,6 +35,15 @@ export interface BuiltinTool {
   }) => Promise<{ content: string; isError?: boolean }>
 }
 
+// 全部内置工具的 id 清单（agent.builtinTools 可勾选的集合；前端 AgentConfigModal 也用）
+export const BUILTIN_TOOL_IDS = ['web_search', 'run_command', 'glob', 'remember', 'subagent'] as const
+export type BuiltinToolId = (typeof BUILTIN_TOOL_IDS)[number]
+
+// 是否应为该 agent 装配某内置工具：未配置（undefined）或空数组 = 全部可用（向后兼容旧数据）
+export function shouldRegisterBuiltin(configured: string[] | undefined, id: string): boolean {
+  return !Array.isArray(configured) || configured.length === 0 || configured.includes(id)
+}
+
 export interface SearchResult {
   title: string
   url: string

@@ -1,6 +1,23 @@
 // 内置工具单元测试
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { builtinTools, parseBaidu, parseSo360 } from '../builtinTools.js'
+import { builtinTools, parseBaidu, parseSo360, shouldRegisterBuiltin, BUILTIN_TOOL_IDS } from '../builtinTools.js'
+
+describe('内置工具可用性配置（shouldRegisterBuiltin）', () => {
+  it('BUILTIN_TOOL_IDS 覆盖全部内置工具', () => {
+    expect([...BUILTIN_TOOL_IDS]).toEqual(expect.arrayContaining(['web_search', 'run_command', 'glob', 'remember', 'subagent']))
+  })
+
+  it('未配置或空数组 = 全部可用（向后兼容旧数据）', () => {
+    expect(shouldRegisterBuiltin(undefined, 'run_command')).toBe(true)
+    expect(shouldRegisterBuiltin([], 'glob')).toBe(true)
+  })
+
+  it('显式列表：包含才可用', () => {
+    expect(shouldRegisterBuiltin(['web_search', 'glob'], 'web_search')).toBe(true)
+    expect(shouldRegisterBuiltin(['web_search', 'glob'], 'run_command')).toBe(false)
+    expect(shouldRegisterBuiltin(['web_search', 'glob'], 'remember')).toBe(false)
+  })
+})
 
 describe('builtinTools 清单', () => {
   it('包含 web_search', () => {
