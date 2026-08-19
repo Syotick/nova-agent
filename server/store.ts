@@ -159,14 +159,15 @@ export function getAgent(id: string): Agent | undefined {
 
 export function saveAgent(agent: Agent) {
   db.prepare(
-    `INSERT INTO agents (id, name, persona, model, mcp_server_ids, skill_ids, color, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO agents (id, name, persona, model, mcp_server_ids, skill_ids, builtin_tools, color, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        persona = excluded.persona,
        model = excluded.model,
        mcp_server_ids = excluded.mcp_server_ids,
        skill_ids = excluded.skill_ids,
+       builtin_tools = excluded.builtin_tools,
        color = excluded.color`,
   ).run(
     agent.id,
@@ -175,6 +176,7 @@ export function saveAgent(agent: Agent) {
     agent.model,
     JSON.stringify(agent.mcpServerIds ?? []),
     JSON.stringify(agent.skillIds ?? []),
+    JSON.stringify(agent.builtinTools ?? []),
     agent.color ?? '#4d6bfe',
     agent.createdAt ?? Date.now(),
   )

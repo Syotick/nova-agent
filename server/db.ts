@@ -73,6 +73,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_memories_agent ON memories(agent_id, created_at DESC);
 `)
 
+// 内置工具配置列迁移：旧库的 agents 表没有 builtin_tools 列，补列（已存在则忽略）
+// 语义：空/缺失 = 该 agent 全部内置工具可用（向后兼容旧数据）
+try {
+  db.exec(`ALTER TABLE agents ADD COLUMN builtin_tools TEXT NOT NULL DEFAULT '[]'`)
+} catch {
+  /* 列已存在 */
+}
+
 // 兼容：旧库可能缺 session_id 列 / memories 缺 last_used_at 列（ALTER 幂等性靠 try/catch）
 try {
   db.exec(`ALTER TABLE tasks ADD COLUMN session_id TEXT`)
@@ -152,6 +160,8 @@ migrateJsonData()
 // ---------- 通用 row → 对象映射 ----------
 
 export function rowToAgent(row: Record<string, unknown>): Agent {
+  const builtin = row.builtin_tools != null ? String(row.builtin_tools) : '[]'
+  const builtinTools = JSON.parse(builtin) as string[]
   return {
     id: String(row.id),
     name: String(row.name),
@@ -161,6 +171,8 @@ export function rowToAgent(row: Record<string, unknown>): Agent {
     skillIds: JSON.parse(String(row.skill_ids ?? '[]')) as string[],
     color: String(row.color ?? '#4d6bfe'),
     createdAt: Number(row.created_at),
+    // 空数组 = 全部内置工具可用（向后兼容旧数据）
+    builtinTools,
   }
 }
 
