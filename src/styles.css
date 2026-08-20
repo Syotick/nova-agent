@@ -39,6 +39,30 @@
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
     font-size: 14px;
+    /* Nova 星空背景：三团极光（紫/靛/青）+ 稀疏星点，固定视口 */
+    background-image:
+      radial-gradient(1200px 620px at 12% -8%, hsl(260 84% 70% / 0.13), transparent 60%),
+      radial-gradient(1000px 540px at 90% 6%, hsl(231 92% 66% / 0.12), transparent 55%),
+      radial-gradient(940px 520px at 68% 110%, hsl(199 89% 60% / 0.08), transparent 60%),
+      radial-gradient(1.2px 1.2px at 20% 32%, hsl(0 0% 100% / 0.5), transparent 55%),
+      radial-gradient(1px 1px at 66% 16%, hsl(0 0% 100% / 0.4), transparent 50%),
+      radial-gradient(1.3px 1.3px at 44% 70%, hsl(260 84% 82% / 0.45), transparent 55%),
+      radial-gradient(1px 1px at 82% 52%, hsl(0 0% 100% / 0.35), transparent 50%),
+      radial-gradient(1px 1px at 30% 82%, hsl(0 0% 100% / 0.3), transparent 50%);
+    background-attachment: fixed;
+  }
+  /* 极光漂移层：全屏光团缓慢移动（动感但不挡内容） */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -20%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(45% 40% at 30% 35%, hsl(260 84% 70% / 0.07), transparent 70%),
+      radial-gradient(40% 38% at 75% 60%, hsl(220 95% 70% / 0.06), transparent 70%);
+    filter: blur(60px);
+    animation: aurora-drift 36s ease-in-out infinite alternate;
   }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: hsl(228 12% 22%); border-radius: 999px; }
@@ -76,6 +100,12 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+/* 极光漂移 */
+@keyframes aurora-drift {
+  0% { transform: translate3d(-3%, -2%, 0) rotate(0deg); }
+  100% { transform: translate3d(4%, 3%, 0) rotate(3deg); }
+}
+
 /* Nova 品牌动效：新星 Logo（轨道绕行 + 星芒呼吸）+ 思考 Orb */
 @keyframes spin-slow { to { transform: rotate(360deg) } }
 @keyframes star-breathe {
