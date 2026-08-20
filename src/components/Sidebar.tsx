@@ -134,15 +134,31 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
     }, 100)
   }
 
-  const navItems = [
-    { id: 'chat', label: '对话', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-    { id: 'trajectory', label: '轨迹', icon: <ChevronRight className="h-3.5 w-3.5" /> },
-    { id: 'models', label: '模型渠道', icon: <Cpu className="h-3.5 w-3.5" /> },
-    { id: 'skills', label: '技能管理', icon: <Sparkles className="h-3.5 w-3.5" /> },
-    { id: 'memories', label: '记忆', icon: <Brain className="h-3.5 w-3.5" /> },
-    { id: 'mcps', label: 'MCP 服务器', icon: <Cable className="h-3.5 w-3.5" /> },
-    { id: 'tasks', label: '定时任务', icon: <Clock className="h-3.5 w-3.5" />, badge: taskBadge },
-    { id: 'tools', label: '工具浏览', icon: <Wrench className="h-3.5 w-3.5" /> },
+  // 导航分组：对话 / 能力（agent 的可视化与扩展能力）/ 管理
+  const navGroups: Array<{ label: string; items: Array<{ id: string; label: string; icon: React.ReactNode; badge?: boolean }> }> = [
+    {
+      label: '对话',
+      items: [
+        { id: 'chat', label: '对话', icon: <MessageSquare className="h-3.5 w-3.5" /> },
+      ],
+    },
+    {
+      label: '能力',
+      items: [
+        { id: 'trajectory', label: '轨迹', icon: <ChevronRight className="h-3.5 w-3.5" /> },
+        { id: 'skills', label: '技能管理', icon: <Sparkles className="h-3.5 w-3.5" /> },
+        { id: 'tools', label: '工具浏览', icon: <Wrench className="h-3.5 w-3.5" /> },
+      ],
+    },
+    {
+      label: '管理',
+      items: [
+        { id: 'models', label: '模型渠道', icon: <Cpu className="h-3.5 w-3.5" /> },
+        { id: 'memories', label: '记忆', icon: <Brain className="h-3.5 w-3.5" /> },
+        { id: 'mcps', label: 'MCP 服务器', icon: <Cable className="h-3.5 w-3.5" /> },
+        { id: 'tasks', label: '定时任务', icon: <Clock className="h-3.5 w-3.5" />, badge: taskBadge },
+      ],
+    },
   ]
 
   return (
@@ -309,22 +325,26 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
 
       {/* 导航 */}
       <div className="flex flex-none flex-col gap-1.5">
-        <span className="px-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">导航</span>
-        <div className="flex flex-col gap-0.5">
-          {navItems.map((item) => (
-            <div
-              key={item.id}
-              className={cn(
-                'flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-muted-foreground transition-all hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
-                view === item.id && 'gradient-brand-soft border border-primary/25 text-foreground',
-              )}
-              onClick={() => {
-                onNavigate(item.id)
-                if (item.id === 'tasks') clearTaskBadge()
-              }}
-            >
-              <span className="relative">{item.icon}{item.badge && <span className="absolute -right-1.5 -top-1.5 h-2 w-2 animate-pulse rounded-full bg-destructive shadow-[0_0_6px_rgba(248,113,113,0.8)]" />}</span>
-              <span className="font-medium">{item.label}</span>
+        <div className="flex flex-col gap-3">
+          {navGroups.map((group) => (
+            <div key={group.label} className="flex flex-col gap-0.5">
+              <span className="px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{group.label}</span>
+              {group.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition-all hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
+                    view === item.id && 'gradient-brand-soft border border-primary/25 text-foreground',
+                  )}
+                  onClick={() => {
+                    onNavigate(item.id)
+                    if (item.id === 'tasks') clearTaskBadge()
+                  }}
+                >
+                  <span className="relative">{item.icon}{item.badge && <span className="absolute -right-1.5 -top-1.5 h-2 w-2 animate-pulse rounded-full bg-destructive shadow-[0_0_6px_rgba(248,113,113,0.8)]" />}</span>
+                  <span className="font-medium">{item.label}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
