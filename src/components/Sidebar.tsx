@@ -163,12 +163,16 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
   ]
 
   return (
-    <aside className="flex h-full w-[264px] flex-none flex-col gap-4 border-r border-border bg-card/60 px-3 py-4 backdrop-blur-xl">
+    <aside
+      className="relative flex h-full w-[264px] flex-none flex-col gap-4 overflow-hidden border-r border-border/80 px-3 py-4 backdrop-blur-xl"
+      style={{ background: 'linear-gradient(180deg, hsl(260 84% 70% / 0.10), hsl(228 18% 6%) 34%), hsl(228 16% 9%)' }}
+    >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card/60 shadow-[0_4px_16px_rgba(77,107,254,0.2)] ring-1 ring-primary/20">
           <StarLogo size={30} animated />
         </div>
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
         <div className="flex flex-col leading-tight">
           <span className="text-gradient text-[15px] font-bold">nova-agent</span>
           <span className="text-[11px] text-muted-foreground">Open-Source AI Agent</span>
@@ -371,6 +375,9 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
         onClose={() => setSettingsOpen(false)}
         onGoModels={() => { setSettingsOpen(false); onNavigate('models') }}
       />
+
+      {/* 底部品牌光晕（新星光） */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-28 bg-[radial-gradient(60%_100%_at_50%_100%,rgba(139,123,255,0.12),transparent)]" />
 
       {/* 确认弹窗 */}
       <AlertDialog open={!!confirmState} onOpenChange={(open) => { if (!open) setConfirmState(null) }}>
