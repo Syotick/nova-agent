@@ -2,7 +2,7 @@ import { Scissors, Rocket } from 'lucide-react'
 import { useMainStore } from '../store'
 import MessageList from './MessageList'
 import Composer from './Composer'
-import StarLogo from './StarLogo'
+import WelcomePanel from './WelcomePanel'
 
 export default function ChatView() {
   const sessions = useMainStore((s) => s.sessions)
@@ -11,6 +11,7 @@ export default function ChatView() {
   const compacting = useMainStore((s) => s.compacting)
   const compactSession = useMainStore((s) => s.compactSession)
   const vibeRound = useMainStore((s) => s.vibeRound)
+  const send = useMainStore((s) => s.send)
   const currentSession = sessions.find((s) => s.id === currentSessionId)
 
   const canCompact = currentSession && currentSession.messages.length > 40 && !currentSession.summary
@@ -62,29 +63,10 @@ export default function ChatView() {
             )}
           </>
         ) : (
-          <div className="relative flex flex-1 flex-col items-center justify-center gap-3 overflow-hidden pb-10">
-            <div className="pointer-events-none absolute h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_40%_35%,rgba(139,123,255,0.15),rgba(77,107,254,0.07)_45%,transparent_70%)] blur-2xl" />
-            <div className="relative flex items-center justify-center rounded-2xl bg-card/60 ring-1 ring-primary/25" style={{ width: 64, height: 64, animation: 'fadeInUp 0.4s ease-out' }}>
-              <StarLogo size={52} animated />
-            </div>
-            <h2 className="relative text-xl font-bold">直接对话</h2>
-            <p className="relative text-[13px] text-muted-foreground">在下方输入消息，即可开始 —— 不需要先新建会话</p>
-            <div className="relative mt-4 grid w-full max-w-[520px] grid-cols-1 gap-2.5 sm:grid-cols-3">
-              {[
-                { icon: '📝', title: '让它写文件', tip: '“在工作区写一个 hello.txt 并读出来”' },
-                { icon: '🚀', title: '试试 Vibe 目标', tip: '“写个计算器页面，用 node 跑通”' },
-                { icon: '🔍', title: '看它怎么干活', tip: '对话后去「轨迹」里步骤回放' },
-              ].map((s) => (
-                <div key={s.title} className="flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card/50 px-3.5 py-3 text-left backdrop-blur-sm transition-all hover:border-primary/35 hover:bg-card/80">
-                  <span className="text-base">{s.icon}</span>
-                  <span className="text-[13px] font-semibold">{s.title}</span>
-                  <span className="text-[11px] leading-relaxed text-muted-foreground">{s.tip}</span>
-                </div>
-              ))}
-            </div>
+          <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto">
+            <WelcomePanel onPick={(text) => void send(text)} />
           </div>
-        )}
-      </div>
+        )}      </div>
       <Composer />
     </div>
   )

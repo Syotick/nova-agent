@@ -3,6 +3,7 @@ import { useMainStore } from '../store'
 import { Paperclip, Bot } from 'lucide-react'
 import ToolCallCard from './ToolCallCard'
 import ThinkingOrb from './ThinkingOrb'
+import WelcomePanel from './WelcomePanel'
 import { renderMarkdown, renderStreaming } from '../markdown'
 import { cn, fmtSize, fmtTokens } from '../lib/utils'
 import type { Message, MessageSegment } from '../types'
@@ -33,6 +34,7 @@ export default function MessageList() {
   const currentText = useMainStore((s) => s.currentText)
   const currentToolCalls = useMainStore((s) => s.currentToolCalls)
   const currentSegments = useMainStore((s) => s.currentSegments)
+  const send = useMainStore((s) => s.send)
   const [visibleLimit, setVisibleLimit] = useState(100)
   const listRef = useRef<HTMLDivElement>(null)  // 思考计时：流式且尚无可见输出（思考/等工具阶段）时每秒累计；有输出或结束即归零
   const [thinkSeconds, setThinkSeconds] = useState(0)
@@ -140,6 +142,10 @@ export default function MessageList() {
         </div>
       )}
       <div className="mx-auto flex max-w-[860px] flex-col gap-4">
+        {/* 空会话：欢迎面板（有会话但还没消息；点击示例即发送） */}
+        {visibleMessages.length === 0 && !streaming && (
+          <WelcomePanel onPick={(text) => void send(text)} />
+        )}
         {visibleMessages.map((msg) => (
           <div key={msg.id} data-mid={msg.id} className={cn('flex gap-3 rounded-xl transition-colors', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
             {msg.role === 'assistant' && (
