@@ -76,6 +76,24 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+/* Nova 品牌动效：新星 Logo（轨道绕行 + 星芒呼吸）+ 思考 Orb */
+@keyframes spin-slow { to { transform: rotate(360deg) } }
+@keyframes star-breathe {
+  0%, 100% { opacity: 0.92; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+.animate-spin-slow { animation: spin-slow 9s linear infinite; }
+.animate-star-breathe { animation: star-breathe 3.2s ease-in-out infinite; }
+
+/* 思考 Orb：空闲慢呼吸；活跃（AI 干活）加速脉冲 + 光环旋转 */
+@keyframes orb-idle-pulse { 0%, 100% { transform: scale(0.92); opacity: 0.85 } 50% { transform: scale(1.04); opacity: 1 } }
+@keyframes orb-active-pulse { 0%, 100% { transform: scale(0.9); opacity: 1 } 50% { transform: scale(1.1); opacity: 0.9 } }
+@keyframes orb-ring-spin { to { transform: rotate(360deg) } }
+.orb-idle > span:first-child { animation: orb-ring-spin 6s linear infinite; }
+.orb-idle > span:nth-child(2) { animation: orb-idle-pulse 3.4s ease-in-out infinite; }
+.orb-active > span:first-child { animation: orb-ring-spin 1.4s linear infinite; }
+.orb-active > span:nth-child(2) { animation: orb-active-pulse 0.9s ease-in-out infinite; }
+
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 .animate-fade-in { animation: fadeIn 0.25s ease-out; }
