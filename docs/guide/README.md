@@ -13,7 +13,9 @@
 | [05](05-memory.md) | `server/memory.ts` | 跨会话记忆：LRU + 去重合并 + AGENTS.md 文件记忆 + 存量归并 | ✅ |
 | [06](06-compact.md) | `server/compact.ts` | 上下文压缩：token 感知 + 双兜底 | ✅ |
 | [07](07-workspace.md) | `server/workspace.ts` | 工作区：agent 的文件权限边界 | ✅ |
-| 08 | `server/vibe.ts` | Vibe 自治循环：目标驱动多轮执行 | 规划中 |
+| [08](08-vibe.md) | `server/vibe.ts` | Vibe 自治循环：目标驱动多轮执行 | ✅ |
+
+**8 篇全部完成**——读完即拥有"一个晚上读懂一个 agent"的完整地图。
 
 ## 每一篇的结构
 
