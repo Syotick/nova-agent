@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMainStore } from '../store'
 import { Paperclip, Bot } from 'lucide-react'
 import ToolCallCard from './ToolCallCard'
+import ThinkingOrb from './ThinkingOrb'
 import { renderMarkdown, renderStreaming } from '../markdown'
 import { cn, fmtSize, fmtTokens } from '../lib/utils'
 import type { Message, MessageSegment } from '../types'
@@ -161,18 +162,23 @@ export default function MessageList() {
                 renderSegments(currentSegments, true)
               ) : (
                 <>
-                  <div
-                    className="markdown-body"
-                    dangerouslySetInnerHTML={{
-                      __html: currentText
-                        ? renderStreaming(currentText)
-                        : '<span class="text-muted-foreground text-[13px]">思考中 · <span class="text-primary font-medium tabular-nums">' +
-                          String(thinkSeconds) + '</span>s</span><span class="inline-flex gap-0.5 ml-1.5 align-middle">' +
-                          '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0s"></i>' +
-                          '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.15s"></i>' +
-                          '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.3s"></i></span>',
-                    }}
-                  />
+                  {currentText ? (
+                    <div className="markdown-body" dangerouslySetInnerHTML={{ __html: renderStreaming(currentText) }} />
+                  ) : (
+                    <div className="flex items-center gap-2.5">
+                      <ThinkingOrb active={streaming} />
+                      <span
+                        className="markdown-body"
+                        dangerouslySetInnerHTML={{
+                          __html: '<span class="text-muted-foreground text-[13px]">思考中 · <span class="text-primary font-medium tabular-nums">' +
+                            String(thinkSeconds) + '</span>s</span><span class="inline-flex gap-0.5 ml-1.5 align-middle">' +
+                            '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0s"></i>' +
+                            '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.15s"></i>' +
+                            '<i class="h-1 w-1 rounded-full bg-primary animate-bounce" style="animation-delay:0.3s"></i></span>',
+                        }}
+                      />
+                    </div>
+                  )}
                   {currentToolCalls.map((tc) => <ToolCallCard key={'s' + tc.id} call={tc} />)}
                 </>
               )}

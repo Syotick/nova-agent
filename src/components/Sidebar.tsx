@@ -10,6 +10,7 @@ import type { Agent, Session } from '../types'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import SettingsModal from './SettingsModal'
+import StarLogo from './StarLogo'
 
 interface SearchResult {
   sessionId: string
@@ -165,8 +166,8 @@ export default function Sidebar({ view, onNewAgent, onEditAgent, onNavigate }: P
     <aside className="flex h-full w-[264px] flex-none flex-col gap-4 border-r border-border bg-card/60 px-3 py-4 backdrop-blur-xl">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-2">
-        <div className="gradient-brand flex h-10 w-10 items-center justify-center rounded-xl shadow-[0_4px_16px_rgba(77,107,254,0.25)]">
-          <Bot className="h-5 w-5 text-white" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card/60 shadow-[0_4px_16px_rgba(77,107,254,0.2)] ring-1 ring-primary/20">
+          <StarLogo size={30} animated />
         </div>
         <div className="flex flex-col leading-tight">
           <span className="text-gradient text-[15px] font-bold">nova-agent</span>

@@ -1,7 +1,8 @@
-import { Scissors, Bot, Rocket } from 'lucide-react'
+import { Scissors, Rocket } from 'lucide-react'
 import { useMainStore } from '../store'
 import MessageList from './MessageList'
 import Composer from './Composer'
+import StarLogo from './StarLogo'
 
 export default function ChatView() {
   const sessions = useMainStore((s) => s.sessions)
@@ -63,8 +64,8 @@ export default function ChatView() {
         ) : (
           <div className="relative flex flex-1 flex-col items-center justify-center gap-3 overflow-hidden pb-10">
             <div className="pointer-events-none absolute h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_40%_35%,rgba(139,123,255,0.15),rgba(77,107,254,0.07)_45%,transparent_70%)] blur-2xl" />
-            <div className="gradient-brand relative flex h-13 w-13 animate-bounce-slow items-center justify-center rounded-2xl shadow-[0_8px_30px_rgba(77,107,254,0.35)]" style={{ width: 52, height: 52, animation: 'fadeInUp 0.4s ease-out' }}>
-              <Bot className="h-7 w-7 text-white" />
+            <div className="relative flex items-center justify-center rounded-2xl bg-card/60 ring-1 ring-primary/25" style={{ width: 64, height: 64, animation: 'fadeInUp 0.4s ease-out' }}>
+              <StarLogo size={52} animated />
             </div>
             <h2 className="relative text-xl font-bold">直接对话</h2>
             <p className="relative text-[13px] text-muted-foreground">在下方输入消息，即可开始 —— 不需要先新建会话</p>
