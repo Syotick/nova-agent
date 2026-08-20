@@ -68,6 +68,19 @@ export default function ChatView() {
             </div>
             <h2 className="relative text-xl font-bold">直接对话</h2>
             <p className="relative text-[13px] text-muted-foreground">在下方输入消息，即可开始 —— 不需要先新建会话</p>
+            <div className="relative mt-4 grid w-full max-w-[520px] grid-cols-1 gap-2.5 sm:grid-cols-3">
+              {[
+                { icon: '📝', title: '让它写文件', tip: '“在工作区写一个 hello.txt 并读出来”' },
+                { icon: '🚀', title: '试试 Vibe 目标', tip: '“写个计算器页面，用 node 跑通”' },
+                { icon: '🔍', title: '看它怎么干活', tip: '对话后去「轨迹」里步骤回放' },
+              ].map((s) => (
+                <div key={s.title} className="flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card/50 px-3.5 py-3 text-left backdrop-blur-sm transition-all hover:border-primary/35 hover:bg-card/80">
+                  <span className="text-base">{s.icon}</span>
+                  <span className="text-[13px] font-semibold">{s.title}</span>
+                  <span className="text-[11px] leading-relaxed text-muted-foreground">{s.tip}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
