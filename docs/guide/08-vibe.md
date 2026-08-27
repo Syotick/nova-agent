@@ -23,18 +23,13 @@
 
 ## 1. 它在架构里的位置：runTurn 的"上级"
 
-```
-用户：输入目标 + 点 Vibe（前端 🚀 按钮）
-  ▼
-POST /api/chat/vibe → runVibe(session, agent, {goal, maxRounds})
-  ▼
-server/vibe.ts（本篇：编排循环）
-  │  每轮都调用 ↓
-  ▼
-server/agentLoop.ts 的 runTurn（01 篇：单轮引擎——读文件/跑命令/思考都在这一轮内完成）
-  │  每轮结束返回 Message
-  ▼
-回到 vibe.ts：看结果 → 收敛？熔断？继续下一轮？
+```mermaid
+flowchart TD
+  USER["用户：输入目标 + 点 Vibe（前端 🚀 按钮）"] --> POST["POST /api/chat/vibe<br/>runVibe(session, agent, {goal, maxRounds})"]
+  POST --> VB["server/vibe.ts（本篇：编排循环）"]
+  VB -->|每轮都调用| RT["server/agentLoop.ts 的 runTurn<br/>01 篇：单轮引擎<br/>读文件 / 跑命令 / 思考都在这一轮内完成"]
+  RT -->|每轮结束返回 Message| BACK["回到 vibe.ts：看结果<br/>收敛？熔断？继续下一轮？"]
+  BACK --> VB
 ```
 
 **分层是清晰的**：`runTurn` = 一个回合（怎么转）；`runVibe` = 一串回合（转几圈直到干完）。
@@ -155,3 +150,15 @@ const deadline = Date.now() + Math.max(1, opts.maxMinutes ?? DEFAULT_MAX_MINUTES
 **这 8 个文件加起来，就是一个"类 Claude Code" agent 的全部骨架**。
 你现在能讲清楚：它怎么转、用什么工具、怎么记得你、怎么不烧爆上下文、怎么守住权限边界、怎么自己干完一件事。
 这就是"一个晚上读完一个 agent"的兑现——接下来，改它、拆它、再组装成你自己的。
+
+---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能解释"为什么循环必须由编排层驱动"：模型不会自己继续，目标在代码里不在模型的自觉里
+- [ ] 能说明 [DONE] 协议为什么是"机器可判的显式信号"而不是信模型说"完成了"
+- [ ] 能说出熔断（连续 2 轮输出相同 → 止损）和"轮数上限"各自防什么、为什么缺一不可
+- [ ] 能数出四重预算（轮数 / 时长 / 每轮步骤 / 熔断）并各说一个防失控场景
+- [ ] 动手：给一个明显无解的目标（如"让 1+1=3 通过测试"），看它被熔断止损
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 08](../exercises/08-vibe.md)。

@@ -28,12 +28,14 @@
 
 ## 1. 它在架构里的位置
 
-```
-agent loop（01）
- ├── remember 工具（agentLoop）→ addMemory(agentId, content, 'auto')   模型主动"记下来"
- ├── memoryBlock（system prompt 拼装）→ searchMemories(...) + listMemories(...)  注入相关记忆
- └── touchMemories(...) 注入后保活
-server/memory.ts（本篇）→ SQLite memories 表
+```mermaid
+flowchart TD
+  AL["agent loop（01）"] -->|remember 工具<br/>模型主动记下来| ADD["addMemory(agentId, content, 'auto')"]
+  AL -->|memoryBlock 拼装<br/>注入相关记忆| SEA["searchMemories / listMemories"]
+  AL -->|注入后保活| TCH["touchMemories"]
+  ADD --> DB[("SQLite memories 表")]
+  SEA --> DB
+  TCH --> DB
 ```
 
 记忆有两个**来源**（`source` 字段）：
@@ -217,6 +219,17 @@ export function consolidateMemories(agentId): number {
 6. **攒近似条目看归并**：手动画两条近似记忆（或用脚本），触发一次 `consolidateMemories`（或等新增后节流触发），观察重复条目被清。
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能说出记忆写入的"防膨胀三连"（内容校验 / 去重合并 / LRU 淘汰），并各举一个防的"垃圾"场景
+- [ ] 能解释为什么这里刻意不用向量库 / FTS：量小 + 中文分词坑 + 可解释 + 零依赖
+- [ ] 能区分记忆表（模型自己攒的个性化事实）与 AGENTS.md（人和团队写的项目约定）的分工
+- [ ] 能说出"短侧覆盖率"比经典 Jaccard 好在哪（判断"A 是不是 B 的补充/改写"）
+- [ ] 动手：让 agent 记住一条偏好，换种说法再让它"更新"同一条，看 `merged` 生效
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 05](../exercises/05-memory.md)。
+
 
 ## 附：关联地图
 

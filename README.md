@@ -4,7 +4,7 @@
 
 > Agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, sandboxed security — all in one small codebase.
 
-[中文文档](./docs/README.zh-CN.md) ｜ [Code Walkthrough: Agent Loop (中文)](./docs/guide/01-agent-loop.md)
+[中文文档](./docs/README.zh-CN.md) ｜ [📚 课程地图（学习路径）](./docs/guide/README.md) ｜ [📘 练习册](./docs/exercises/README.md) ｜ [Code Walkthrough: Agent Loop (中文)](./docs/guide/01-agent-loop.md)
 
 ---
 
@@ -283,6 +283,19 @@ Drop a JSON config into `mcp-servers/` to connect any MCP server:
 | Animations | CSS keyframes (styles.css) | Zero dependencies |
 
 **Documentation**: [中文文档](./docs/README.zh-CN.md)
+
+---
+
+## 🎓 Learn (self-paced course)
+
+Nova Agent doubles as a **teaching project**: the code is written to be read in one evening, then modified. If you want to actually *learn* how an agent works, follow the course map instead of just skimming files:
+
+- [📚 Course Map（课程地图 · 学习路径）](./docs/guide/README.md) — a three-stage path (入门 → 进阶 → 挑战) across the 8 core files, with per-lesson acceptance criteria
+- [📘 Exercises（练习册）](./docs/exercises/README.md) — hands-on drills per lesson (入门/进阶/挑战), with separate answers so you can self-check honestly
+- [🎓 Capstone（终极验收项目）](./docs/exercises/capstone.md) — re-implement a minimal agent from scratch to graduate
+- [📖 Glossary（术语总表）](./docs/glossary.md) — every term from every walkthrough, in one place
+
+> This project is **feature-frozen** by design: learning materials are the focus, not new features.
 
 ---
 

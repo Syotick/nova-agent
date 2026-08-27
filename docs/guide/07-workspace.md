@@ -26,20 +26,16 @@
 
 ## 1. 它在架构里的位置
 
-```
-用户（输入框工具栏的工作区入口 / 设置页）
-  │  PUT /api/workspace
-  ▼
-server/index.ts → setWorkspacePath（校验 → 存 config）
-  │
-  ├─ server/workspace.ts（本篇：唯一事实源）
-  │    ├─ getWorkspacePath()  ← 所有人都从这拿"当前工作区"
-  │    │    ├─ agentLoop：附件绝对路径拼接
-  │    │    ├─ uploads 路由：附件存 <工作区>/uploads
-  │    │    ├─ mcp.ts：resolveMcpArgs（{{workspace}} → 工作区）
-  │    │    └─ terminal/glob：命令和搜索只在工作区内
-  │    └─ validateWorkspaceRaw()（危险目标拒绝）
-  └─ MCP filesystem server 挂载根 = 工作区
+```mermaid
+flowchart TD
+  USER["用户<br/>输入框工具栏 / 设置页"] -->|PUT /api/workspace| IDX["server/index.ts → setWorkspacePath<br/>校验 → 存 config"]
+  IDX --> WS["server/workspace.ts（本篇：唯一事实源）"]
+  WS -->|getWorkspacePath()<br/>所有人都从这拿当前工作区| AL["agentLoop：附件绝对路径拼接"]
+  WS --> UP["uploads 路由：附件存 <工作区>/uploads"]
+  WS --> MCP["mcp.ts：resolveMcpArgs<br/>{{workspace}} → 工作区"]
+  WS --> TG["terminal / glob：命令和搜索只在工作区内"]
+  WS -->|validateWorkspaceRaw| REJ["危险目标拒绝"]
+  WS --> FS["MCP filesystem server 挂载根 = 工作区"]
 ```
 
 一句话：**全项目所有"文件相关"的地方，都从 `getWorkspacePath()` 拿根**——这是"单一事实源"设计：改一处（配置），全链路跟着变，不会出现"A 处用旧目录、B 处用新目录"的分裂。
@@ -164,6 +160,17 @@ export function resolveMcpArgs(args: string[]): string[] {
 4. **改回默认**：工作区入口 → 清空输入保存 = 重置回兜底 `workspace/`。
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能说出三类被拒绝的"危险目标"及理由（项目根 / 密钥文件目录及其祖先 / 脏输入）
+- [ ] 能解释为什么安全判断必须"忽略大小写"（Windows 路径 `D:\a` 与 `d:\A` 是同一目录，否则可绕过）
+- [ ] 能说清 `{{workspace}}` 占位符的联动价值：配置即模板、运行才落地，改工作区自动跟随
+- [ ] 能讲清"单一事实源"：为什么全项目所有文件操作都从 `getWorkspacePath()` 拿根
+- [ ] 动手：填一个 `..`（项目上级）保存，亲眼看到被 400 拒绝及原因
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 07](../exercises/07-workspace.md)。
+
 
 ## 附：关联地图
 

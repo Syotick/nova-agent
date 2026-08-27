@@ -28,18 +28,13 @@
 
 ## 1. 它在架构里的位置
 
-```
-agent loop（01）
-  │  tools['run_command']（装配处）→ executeCommand(session.id, args)
-  ▼
-server/terminal.ts（本篇）
-  │  spawn(shell, ...)
-  ▼
-  shell 子进程（npm / git / node ...）
-  │
-  ├─ 超时 → killTree（整树终止）
-  ├─ 中断（用户停止）→ abortRun → killSessionProcesses（杀整个会话的进程）
-  └─ 正常结束 → exit code + 输出返回
+```mermaid
+flowchart TD
+  AL["agent loop（01）"] -->|executeCommand| TM["server/terminal.ts（本篇）"]
+  TM -->|spawn| SH["shell 子进程<br/>npm / git / node ..."]
+  SH -->|超时| K1["killTree 整树终止"]
+  SH -->|中断| K2["abortRun → killSessionProcesses<br/>杀整个会话的进程"]
+  SH -->|正常结束| K3["exit code + 输出返回"]
 ```
 
 一句话：**执行命令 + 三件事兜底（超时/中断/结束）都保证进程被回收**。
@@ -174,6 +169,17 @@ const finished = await new Promise(... => {
 4. **试引号坑**：临时把 `windowsVerbatimArguments` 改成 `false`，跑 `node -e "console.log(1)"`，看输出怎么丢——切身感受 §5 的坑。
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能解释"为什么杀进程要杀整棵树"：只杀父进程，孙进程还活着照样占端口
+- [ ] 能说出两个 Windows 专属坑（引号被重写 / detached 丢输出）及各自修法
+- [ ] 能说明"超时≠失败"的设计意图：对 `npm run dev` 这类永不退出的命令，超时是正常结局，关键是保留中途输出
+- [ ] 能讲清"会话进程注册表"是干嘛的：中断时怎么知道该清哪些进程
+- [ ] 动手：跑一个长命令中途打断，去任务管理器确认进程树被清干净
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 03](../exercises/03-terminal.md)。
+
 
 ## 附：关联地图
 

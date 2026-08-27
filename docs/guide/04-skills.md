@@ -24,12 +24,14 @@
 
 ## 1. 它在架构里的位置
 
-```
-server/skills.ts（本篇）
- ├── loadSkills(): 扫 skills/*/SKILL.md → 技能列表（目录页）
- ├── injectSkills(agent.skillIds) → 拼进 system prompt（agentLoop 01 篇 L448 调用）
- ├── saveSkill / deleteSkill → 技能管理页"点几下就建/删"的底层
- └── 可视化编辑器的背后：表单 → 生成 SKILL.md 文件
+```mermaid
+flowchart TD
+  LOAD["loadSkills()<br/>扫 skills/*/SKILL.md → 技能列表（目录页）"] --> UI["技能管理页"]
+  UI -->|saveSkill / deleteSkill| FILE["skills/<id>/SKILL.md 文件"]
+  FILE -->|扫描| LOAD
+  AGENT["agent（勾选 skillIds）"] --> INJ["injectSkills(agent.skillIds)<br/>拼进 system prompt（agentLoop 01 篇调用）"]
+  INJ --> AGENT
+  UI -->|表单 → 生成| FILE
 ```
 
 `agentLoop.ts` 里只有一行用它：
@@ -160,6 +162,17 @@ if (!/^[\w\u4e00-\u9fa5-]+$/.test(id)) return false
 4. **试路径穿越**：在删除接口用 `id="../xxx"` 试一下——会被白名单拦（返回 false），这正是安全校验的意义。
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能自己写一个 `skills/<名字>/SKILL.md`（frontmatter + 正文）并让 agent 生效（目录即安装）
+- [ ] 能解释"两级加载"如何省 token：不勾选的技能完全不进 prompt，勾选才注入全文
+- [ ] 能指出 `deleteSkill` 那行白名单校验为什么必要（用户输入拼进路径的第一道防线）
+- [ ] 能说清 frontmatter 的 `when_to_use` 是干嘛的（让模型判断这技能现在用不用）
+- [ ] 动手：从技能管理页建一个技能，再去 `skills/` 看生成的 SKILL.md 与你填的表单一一对应
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 04](../exercises/04-skills.md)。
+
 
 ## 附：关联地图
 

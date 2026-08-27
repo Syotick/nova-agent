@@ -4,7 +4,7 @@
 
 > Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离，都在一个小代码库里。
 
-[English README](../README.md) ｜ [📖 读代码指南](./guide/)（① Agent Loop ② MCP 客户端…陆续更新）
+[English README](../README.md) ｜ [📚 课程地图](./guide/README.md) ｜ [📘 练习册](./exercises/README.md) ｜ [📖 术语总表](./glossary.md)
 
 ---
 
@@ -21,7 +21,7 @@
 ## ✨ 功能清单
 
 ### Agent 核心
-- ✅ **Agent 循环**：Vercel AI SDK `streamText` 多步工具调用循环（最多 8 步）
+- ✅ **Agent 循环**：Vercel AI SDK `streamText` 多步工具调用循环（默认最多 24 步，`NOVA_AGENT_MAX_STEPS` 可调）
 - ✅ **多轮对话**：完整上下文 + 自动标题
 - ✅ **流式输出**：SSE 打字机效果 + 思考动画
 - ✅ **Markdown 渲染**：标题 / 代码高亮 / 表格 / 链接 / 引用（markdown-it + highlight.js）
@@ -285,4 +285,4 @@ when_to_use: 使用时机
 
 ## 📄 License
 
-[MIT](./LICENSE) © 2026 [Syotick](https://github.com/Syotick)
+[MIT](../LICENSE) © 2026 [Syotick](https://github.com/Syotick)

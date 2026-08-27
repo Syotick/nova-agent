@@ -27,17 +27,17 @@
 
 ## 1. 它在架构里的位置
 
-```
-agent loop（01 篇，server/agentLoop.ts）
-   │  调用 listToolsFor / callMcpTool
-   ▼
-server/mcp.ts（本篇）
-   │  spawn
-   ▼
-   MCP server 子进程（每个 = 一个独立进程）
-     ├─ filesystem  ──▶ 文件读写
-     ├─ playwright  ──▶ 浏览器自动化
-     └─ （任意按协议写的工具）
+```mermaid
+flowchart TD
+  AL["agent loop（01 篇）<br/>server/agentLoop.ts"] -->|listToolsFor / callMcpTool| MCP["server/mcp.ts（本篇）"]
+  MCP -->|spawn| S1["filesystem server<br/>文件读写"]
+  MCP -->|spawn| S2["playwright server<br/>浏览器自动化"]
+  MCP -->|spawn| S3["任意按协议写的工具"]
+  subgraph SRV["MCP server 子进程（每个 = 独立进程）"]
+    S1
+    S2
+    S3
+  end
 ```
 
 `mcp.ts` 是**桥**：上面接 agent loop（给它工具），下面接一堆外部工具进程。核心工作三句话：
@@ -226,6 +226,17 @@ await server.connect(new StdioServerTransport())  // 从标准输入读请求、
 然后配置里加 `{ "id": "demo", "command": "node", "args": ["./my-tool-server.js"] }`——保存，你的 agent 立刻多了一个 `add` 工具。**看懂这段，MCP 对你就没有秘密了。**
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能用一句话说清"MCP server=独立进程（工具提供方）/ client=我们（连接方）"的模型
+- [ ] 能背出建立连接的四步（建 client → 建 stdio transport → connect 握手 → listTools），并解释每一步在干嘛
+- [ ] 能解释为什么重连要用"指数退避"而不是每秒重试（防重试风暴）
+- [ ] 能说出"配置即授权"这个安全哲学：给一个 json = 给一种能力，删掉 = 收回
+- [ ] 动手：自己写一个 10 行的极简 MCP server（`add` 工具）并让 agent 用起来
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 02](../exercises/02-mcp.md)。
+
 
 ## 附：关联地图
 

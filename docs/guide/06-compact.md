@@ -25,14 +25,13 @@
 
 ## 1. 它在架构里的位置
 
-```
-用户发消息
-  │  agentLoop.runTurn（01 篇）
-  ▼
-  shouldCompact(session, agent.model)   ← 本篇：要不要压？
-  ├─ true → compactSession() → LLM 总结旧历史 → session.summary
-  │          （摘要不进消息列表，agentLoop 在拼 system prompt 时注入 summaryBlock）
-  └─ false → 直接跑
+```mermaid
+flowchart TD
+  U["用户发消息"] --> RT["agentLoop.runTurn（01 篇）"]
+  RT --> SC{"shouldCompact(session, agent.model)<br/>要不要压？（本篇）"}
+  SC -->|true| CS["compactSession()<br/>LLM 总结旧历史 → session.summary"]
+  CS --> SB["摘要不进消息列表<br/>agentLoop 拼 system prompt 时注入 summaryBlock"]
+  SC -->|false| GO["直接跑"]
 ```
 
 **压缩和记忆是两回事**（别混）：
@@ -155,6 +154,17 @@ export async function compactSession(session, agent): Promise<CompactResult | nu
 4. **看摘要质量：** 触发后读 `session.summary`，对照"保留目标/完成/待办、省略寒暄"的要求——体会那段提示词的作用。
 
 ---
+
+## ✅ 读完自查（你能做到吗）
+
+- [ ] 能解释"双条件触发"：token 占用超 90%（真实计数优先）+ 消息数超 40 条的保守兜底
+- [ ] 能说清为什么"不要傻傻把每条消息的 token 加起来"：API 的 input_tokens 已含全部历史，取真值当基准只补新增
+- [ ] 能解释摘要为什么放 `session.summary` 独立字段而不是消息列表（否则越滚越大、参与再压缩）
+- [ ] 能说出压缩提示词里"保留什么、省略什么"两条要求的意义
+- [ ] 动手：`NOVA_AGENT_COMPACT_MIN=5` 聊 6 条触发压缩，看前端横幅 + 顶部摘要
+
+> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 06](../exercises/06-compact.md)。
+
 
 ## 附：关联地图
 
