@@ -1,5 +1,14 @@
 // 内置工具单元测试
 import { describe, it, expect, vi, afterEach } from 'vitest'
+// mock 掉 child_process（web_search 的 curl 兜底用），让"主路径失败→回退"用例不依赖真实网络
+// （360/百度/DDG 在无外网/CI 环境下会让 curl 兜底挂起，导致测试超时/不稳定）
+// 注意：builtinTools 里是 promisify(execFile)，mock 必须保持回调风格（调 cb 而不是返回 Promise），
+// 否则 promisify 包装后永远不会 resolve/reject，测试仍会挂起。
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn((_file: string, _args: string[], _opts: unknown, cb: (err: Error | null) => void) => {
+    cb(new Error('curl unavailable (mocked)'))
+  }),
+}))
 import { builtinTools, parseBaidu, parseSo360, shouldRegisterBuiltin, BUILTIN_TOOL_IDS } from '../builtinTools.js'
 
 describe('内置工具可用性配置（shouldRegisterBuiltin）', () => {
@@ -125,11 +134,13 @@ describe('web_search 主路径（DeepSeek 原生搜索）', () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('network down')
     }))
+    // child_process 已在文件顶部 mock（execFile 立即 reject），curl 兜底快速失败：
+    // 验证"主路径 + 兜底都失败"时优雅降级为错误信息（不崩溃、不抛异常），且不依赖真实网络
     const r = await ws.execute({ query: '测试查询' }, { onStart: () => {}, onEnd: () => {} })
-    // 不崩溃、不抛异常；fallback 结果可能为空（提示换关键词）或含内容（curl 成功）
     expect(typeof r.content).toBe('string')
     expect(r.content.length).toBeGreaterThan(0)
-  }, 30_000) // 真实网络 fallback（360/百度/DDG），放宽超时
+    expect(r.isError).toBe(true)
+  })
 
   it('key 优先级：NOVA_AGENT_SEARCH_API_KEY 优先于全局 key', async () => {
     vi.stubEnv('NOVA_AGENT_SEARCH_API_KEY', 'sk-search-independent')
