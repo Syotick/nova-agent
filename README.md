@@ -1,5 +1,12 @@
 # ✨ Nova Agent
 
+[![CI](https://github.com/Syotick/nova-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Syotick/nova-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Syotick/nova-agent?color=blue)](https://github.com/Syotick/nova-agent/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-22%2B-3c873a.svg)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg)](https://www.typescriptlang.org)
+[![GitHub stars](https://img.shields.io/github/stars/Syotick/nova-agent?style=social)](https://github.com/Syotick/nova-agent)
+
 **Nova Agent** is a small, self-contained AI agent for learning agent engineering. The whole stack — agent loop, MCP tools, Agent Skills, memory, scheduled tasks — fits in a codebase you can read in one evening, then run, then modify.
 
 > Agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, sandboxed security — all in one small codebase.
