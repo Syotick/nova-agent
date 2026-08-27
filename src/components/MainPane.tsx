@@ -1,14 +1,15 @@
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Cpu, Brain, Cable, Sparkles, Clock, Wrench } from 'lucide-react'
 import { useMainStore } from '../store'
 import ChatView from './ChatView'
-import TrajectoryView from './TrajectoryView'
-import SkillManager from './SkillManager'
-import TaskManager from './TaskManager'
-import ToolManager from './ToolManager'
-import ModelChannels from './ModelChannels'
-import MemoryManager from './MemoryManager'
-import McpManager from './McpManager'
+// 非首屏视图懒加载（代码分割）：管理页按需加载，减小首屏 bundle
+const TrajectoryView = lazy(() => import('./TrajectoryView'))
+const SkillManager = lazy(() => import('./SkillManager'))
+const TaskManager = lazy(() => import('./TaskManager'))
+const ToolManager = lazy(() => import('./ToolManager'))
+const ModelChannels = lazy(() => import('./ModelChannels'))
+const MemoryManager = lazy(() => import('./MemoryManager'))
+const McpManager = lazy(() => import('./McpManager'))
 import { fmtTokens } from '../lib/utils'
 
 interface Props {
@@ -89,15 +90,27 @@ export default function MainPane({ view }: Props) {
       </header>
 
       <div className="relative h-full min-h-0 flex-1 overflow-hidden">
-        {view === 'chat' && <ChatView key="chat" />}
-        {view === 'trajectory' && <TrajectoryView key="traj" />}
-        {view === 'models' && <ModelChannels key="models" />}
-        {view === 'memories' && <MemoryManager key="memories" />}
-        {view === 'mcps' && <McpManager key="mcps" />}
-        {view === 'skills' && <SkillManager key="skills" />}
-        {view === 'tasks' && <TaskManager key="tasks" />}
-        {view === 'tools' && <ToolManager key="tools" />}
+        <Suspense fallback={<ViewLoading />}>
+          {view === 'chat' && <ChatView key="chat" />}
+          {view === 'trajectory' && <TrajectoryView key="traj" />}
+          {view === 'models' && <ModelChannels key="models" />}
+          {view === 'memories' && <MemoryManager key="memories" />}
+          {view === 'mcps' && <McpManager key="mcps" />}
+          {view === 'skills' && <SkillManager key="skills" />}
+          {view === 'tasks' && <TaskManager key="tasks" />}
+          {view === 'tools' && <ToolManager key="tools" />}
+        </Suspense>
       </div>
     </main>
+  )
+}
+
+// 懒加载视图的加载占位（管理页按需下载时的过渡态）
+function ViewLoading() {
+  return (
+    <div className="flex h-full w-full items-center justify-center gap-2.5 text-sm text-muted-foreground">
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      <span>加载中…</span>
+    </div>
   )
 }

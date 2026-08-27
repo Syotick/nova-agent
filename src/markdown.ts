@@ -1,6 +1,8 @@
 // Markdown 渲染：markdown-it + highlight.js
 import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
+// 只引入常用语言集（约 35 种语言）而非全量（~190 种），大幅减小 bundle；
+// 未收录语言自动降级为纯文本展示，不影响渲染安全性
+import hljs from 'highlight.js/lib/common'
 
 const md: MarkdownIt = new MarkdownIt({
   html: false,            // 不渲染原始 HTML（防 XSS）
