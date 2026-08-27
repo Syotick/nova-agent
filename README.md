@@ -21,7 +21,7 @@
 ## ✨ Features
 
 ### Agent Core
-- ✅ **Agent loop**: multi-step tool-calling loop via Vercel AI SDK `streamText` (up to 8 steps)
+- ✅ **Agent loop**: multi-step tool-calling loop via Vercel AI SDK `streamText` (up to 24 steps by default, tunable via `NOVA_AGENT_MAX_STEPS`)
 - ✅ **Multi-turn chat**: full context with auto-generated titles
 - ✅ **Streaming output**: SSE typewriter effect + thinking indicator
 - ✅ **Markdown rendering**: headings / code highlighting / tables / links / quotes (markdown-it + highlight.js)
