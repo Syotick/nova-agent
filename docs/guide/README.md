@@ -89,6 +89,7 @@ flowchart LR
 |---|---|
 | [📖 术语总表](../glossary.md) | 8 篇指南全部"黑话"汇总（协议/架构/工程/安全分类） |
 | [📄 项目文档](../README.md) | 功能、架构、API、安全模型总览 |
-| [🇨🇳 中文说明](../README.zh-CN.md) | 对应根目录英文 README 的中文版 |
+| [🇨🇳 中文主页](../README.md) | 项目完整中文说明（仓库主页） |
+| [🇬🇧 English](../README.en.md) | 项目完整英文说明 |
 
 > 遇到黑话先翻对应篇的术语表，汇总版见[术语总表](../glossary.md)；没 covered 的欢迎提 issue。

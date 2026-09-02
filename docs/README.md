@@ -14,7 +14,8 @@
 
 | 文档 | 内容 |
 |---|---|
-| [README.zh-CN.md](./README.zh-CN.md) | 项目中文说明（对应根目录英文 README） |
+| [中文主页](../README.md) | 项目中文说明（仓库主页，完整版） |
+| [README.en.md](./README.en.md) | 英文说明（完整版） |
 | [CHANGELOG.md](../CHANGELOG.md) | 变更记录 |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献指南 |
 

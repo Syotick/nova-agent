@@ -1,4 +1,4 @@
-# ✨ Nova Agent
+# ✨ Nova Agent（新星 Agent）
 
 [![CI](https://github.com/Syotick/nova-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Syotick/nova-agent/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Syotick/nova-agent?color=blue)](https://github.com/Syotick/nova-agent/releases)
@@ -7,302 +7,299 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg)](https://www.typescriptlang.org)
 [![GitHub stars](https://img.shields.io/github/stars/Syotick/nova-agent?style=social)](https://github.com/Syotick/nova-agent)
 
-**Nova Agent** is a small, self-contained AI agent for learning agent engineering. The whole stack — agent loop, MCP tools, Agent Skills, memory, scheduled tasks — fits in a codebase you can read in one evening, then run, then modify.
+**Nova Agent** 是一个好学、开箱即用的开源 AI Agent。Agent 循环、MCP 工具、Agent Skills、记忆、任务自动化——整个设计目标是一个晚上读完、能跑起来、然后动手改。面向在校大学生和转行做 Agent 开发的开发者。
 
-> Agent loop, MCP tools, skill system, multi-turn chat, trajectory tracing, multi-agent management, visual configuration, sandboxed security — all in one small codebase.
+> Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离，都在一个小代码库里。
 
-[中文文档](./docs/README.zh-CN.md) ｜ [📚 课程地图（学习路径）](./docs/guide/README.md) ｜ [📘 练习册](./docs/exercises/README.md) ｜ [Code Walkthrough: Agent Loop (中文)](./docs/guide/01-agent-loop.md)
-
----
-
-## 🎓 Who is this for
-
-- **University students and career-switching developers** who want to learn how agents actually work. Start at the agent loop, read the MCP client and the SKILL.md loader, then break things and fix them.
-- **Self-hosting hobbyists**. Everything runs locally: private, vendor-neutral (any OpenAI-compatible model), zero telemetry, Node 22+ only.
-- **DIY / second development**. Add a skill by dropping a folder; add a tool by dropping a JSON config.
-
-> If you need a production product with a plugin ecosystem, use Claude Code, Cursor or Windsurf. This project is for learning and teaching, not for competing with them.
+[English](./docs/README.en.md) ｜ [📚 课程地图（学习路径）](./docs/guide/README.md) ｜ [📘 练习册](./docs/exercises/README.md) ｜ [🎓 验收项目](./docs/exercises/capstone.md) ｜ [📖 术语总表](./docs/glossary.md)
 
 ---
 
-## ✨ Features
+## 🎓 适合谁
 
-### Agent Core
-- ✅ **Agent loop**: multi-step tool-calling loop via Vercel AI SDK `streamText` (up to 24 steps by default, tunable via `NOVA_AGENT_MAX_STEPS`)
-- ✅ **Multi-turn chat**: full context with auto-generated titles
-- ✅ **Streaming output**: SSE typewriter effect + thinking indicator
-- ✅ **Markdown rendering**: headings / code highlighting / tables / links / quotes (markdown-it + highlight.js)
-- ✅ **Tool call cards**: live tool cards (input / output / duration / status)
-- ✅ **Trajectory view**: per-step timeline + inspector (input / output / duration / tokens)
-- ✅ **Stop & resume**: Stop button during streaming; generated content is preserved
-- ✅ **Context compaction**: when a session exceeds 40 messages, earlier history is summarized by the LLM (injected into the system prompt), keeping the last 20, so long conversations never overflow
-- ✅ **Terminal (Codex mode)**: `run_command` runs shell commands in the workspace (npm / git / node / python...) with output capture, timeout auto-kill and whole process-tree cleanup on interrupt. Read code, edit code, verify with builds/tests, start the project — all from chat.
-- ✅ **Six core coding tools (Claude Code compatible)**: `read_file` / `edit_file` / `write_file` (filesystem MCP), `search_files` (grep), `glob` (filename pattern matching, built-in), and `run_command` (bash) — the toolset that lets an agent actually edit a codebase.
-- ✅ **Vibe loop (autonomous goals)**: type a goal and press Vibe (🚀 in the UI). The agent plans, implements, verifies and self-heals across multiple rounds until it converges (signalled by `[DONE]`), bounded by round/time budgets and a circuit breaker that stops on repeated identical failures. Interrupting cleans up running processes.
+- **在校大学生和转行开发者**，想弄明白 Agent 到底怎么工作。从 agent loop 读起，再看 MCP 客户端和 SKILL.md 加载器，然后拆开、修好它。
+- **自托管爱好者**。全本地运行：私密、厂商中立（任意 OpenAI 兼容模型）、零遥测，只要 Node 22+。
+- **二次开发**。加技能 = 丢一个文件夹；加工具 = 写一个 JSON 配置。
 
-### Multi-Agent Management
-- ✅ Create / edit / delete agents (persona + model + tool selection + skill selection)
-- ✅ Agent switching from the sidebar (auto-returns to chat view)
-- ✅ Per-agent isolated configuration; deleting an agent removes its sessions
-
-### Visual Configuration (no-code friendly)
-- ✅ **Skill manager**: create / edit / delete skills through forms (generates `SKILL.md`, no file editing required)
-- ✅ **Skill search**: instant filtering when the skill list grows
-- ✅ **Tool browser**: all MCP tools grouped by server with parameter schemas
-- ✅ **API key setup**: configure from the 🔑 button in the UI, stored outside the project
-
-### Session Management
-- ✅ Create / switch / rename (inline edit) / delete sessions
-- ✅ First message auto-creates a session
-- ✅ Session persistence via **SQLite** (auto-migrates legacy JSON data)
-
-### Scheduled Tasks
-- ✅ Cron-based scheduled tasks: let an agent run on a timer (e.g. market watch every 5 minutes, daily report)
-- ✅ Tasks run in dedicated persistent sessions (continuous context), results recorded
-- ✅ Run-on-demand, enable/pause/delete from the UI
-
-### Security
-- ✅ **Workspace isolation**: agents can only access the configurable workspace (default `workspace/`) — project code and API keys are unreachable
-- ✅ **External key storage**: API key lives outside the project (`.nova-agent-key.json`)
-- ✅ Custom confirmation dialogs (delete protection)
-- ✅ Raw HTML disabled in Markdown rendering (XSS-safe)
-- ✅ **MCP health checks**: automatic ping + exponential-backoff reconnect
-
-### Experience
-- ✅ Dark glassmorphism + purple-blue gradient (LobeChat style)
-- ✅ Animations: message enter/leave, tool card expand, view transitions, spring modals
-- ✅ Unified navigation (chat / trajectory / skills / tools)
+> 如果你需要久经考验、插件齐全的商业产品，请用 Claude Code / Cursor 等。本项目面向学习与教学，不打算跟它们竞争。
 
 ---
 
-## 🏗️ Architecture
+## ✨ 功能清单
+
+### Agent 核心
+- ✅ **Agent 循环**：Vercel AI SDK `streamText` 多步工具调用循环（默认最多 24 步，`NOVA_AGENT_MAX_STEPS` 可调）
+- ✅ **多轮对话**：完整上下文 + 自动标题
+- ✅ **流式输出**：SSE 打字机效果 + 思考动画
+- ✅ **Markdown 渲染**：标题 / 代码高亮 / 表格 / 链接 / 引用（markdown-it + highlight.js）
+- ✅ **工具调用卡片**：实时展示工具输入 / 输出 / 耗时 / 状态
+- ✅ **轨迹视图**：每步工具调用时间线 + inspector（输入 / 输出 / 耗时 / token）
+- ✅ **中断 / 继续**：流式期间可 Stop，已生成内容保留
+- ✅ **上下文压缩**：token 感知。上下文占用接近模型窗口上限时（默认 90%，真实 API 计数），LLM 自动把较早历史总结为摘要（注入 system prompt）并保留最近 20 条，长对话不会溢出
+- ✅ **终端执行（Codex 模式）**：`run_command` 在工作区执行 shell 命令（npm / git / node / python…），捕获输出、超时自动终止、中断时清理整个进程树。读代码、改代码、跑构建/测试验证、启动项目，都能在对话里完成
+- ✅ **六大核心编程工具（对齐 Claude Code）**：`read_file` / `edit_file` / `write_file`（filesystem MCP）+ `search_files`（grep）+ `glob`（文件名模式匹配，内置）+ `run_command`（bash）——让 Agent 真正能改代码的工具集
+- ✅ **Vibe 自治循环**：输入目标后点 Vibe（🚀 按钮）。Agent 自动规划、实现、验证、自愈，多轮循环直到收敛（以 `[DONE]` 信号为准），带轮数/时长预算，连续相同失败自动熔断止损；中断时清理运行中的进程
+
+### 多 Agent 管理
+- ✅ 新建 / 编辑 / 删除 Agent（persona + 模型 + 工具勾选 + 技能勾选）
+- ✅ 侧边栏切换 Agent（自动回到对话视图）
+- ✅ 每个 Agent 独立配置，删除时连带清理会话
+
+### 可视化配置（零代码）
+- ✅ **技能管理**：表单可视化新建 / 编辑 / 删除技能（自动生成 SKILL.md）
+- ✅ **技能搜索**：技能多时输入关键词即时过滤
+- ✅ **工具浏览**：按 MCP server 分组展示全部工具 + 参数 Schema
+- ✅ **API Key 配置**：界面 🔑 按钮配置，密钥存项目外
+
+### 会话管理
+- ✅ 会话切换 / 新建 / 重命名（行内编辑）/ 删除
+- ✅ 首条消息自动创建会话
+- ✅ **SQLite** 持久化（自动迁移旧 JSON 数据）
+
+### 定时任务
+- ✅ 5 段 cron 定时任务：让 Agent 定时干活（如每 5 分钟盯盘、每日日报）
+- ✅ 任务在专用会话中运行（上下文连续），执行结果落库
+- ✅ 支持手动立即执行、暂停/启用/删除
+
+### 安全
+- ✅ **工作区隔离**：Agent 只能访问可配置的工作区（默认 `workspace/`），读不到项目代码与 API key
+- ✅ **Key 外置**：密钥存项目外 `.nova-agent-key.json`
+- ✅ 删除操作需自定义确认弹窗
+- ✅ Markdown 渲染禁用原始 HTML（防 XSS）
+- ✅ **MCP 健康检查**：自动 ping + 指数退避重连
+
+### 体验
+- ✅ 深色玻璃拟态 + 紫蓝渐变（LobeChat 风格）
+- ✅ 动画：消息进出场 / 工具卡片展开 / 视图切换 / 弹窗 spring
+- ✅ 统一导航（对话 / 轨迹 / 技能 / 工具）侧边栏互切
+
+---
+
+## 🏗️ 技术架构
 
 ```
-┌───────────── Browser (React 19) ──────────────┐
-│  Sidebar (Agents/Sessions/Nav) → MainPane     │
-│    ├─ ChatView (messages + tool cards + input) │
-│    ├─ TrajectoryView (step timeline)           │
-│    ├─ SkillManager (visual skill editing)      │
-│    └─ ToolManager (tool browser)               │
-│  Zustand store → api.ts (REST + SSE)           │
-└───────────────────┬───────────────────────────┘
-                    │ fetch /api/* (SSE stream)
-┌───────────────────▼───────────────────────────┐
-│  Express backend (server/)                     │
-│  ├─ agentLoop.ts   agent loop (AI SDK streamText) │
-│  ├─ compact.ts     context compaction (LLM summary) │
-│  ├─ mcp.ts         MCP client management       │
-│  ├─ skills.ts      SKILL.md scan/parse/CRUD    │
-│  ├─ store.ts       agent/session persistence + key mgmt │
-│  └─ index.ts       routes (REST + SSE + abort) │
+┌───────────── 浏览器 (React 19) ──────────────┐
+│  Sidebar（Agent/会话/导航）→ MainPane        │
+│    ├─ ChatView（消息 + 工具卡片 + 输入框）    │
+│    ├─ TrajectoryView（轨迹时间线）            │
+│    ├─ SkillManager（技能可视化编辑）          │
+│    └─ ToolManager（工具浏览）                 │
+│  Zustand store → api.ts（REST + SSE）        │
+└───────────────────┬──────────────────────────┘
+                    │ fetch /api/*（SSE 流式）
+┌───────────────────▼──────────────────────────┐
+│  Express 后端（server/）                      │
+│  ├─ agentLoop.ts   Agent 循环（AI SDK streamText）│
+│  ├─ compact.ts     上下文压缩（LLM 总结）      │
+│  ├─ mcp.ts         MCP 客户端管理              │
+│  ├─ skills.ts      SKILL.md 扫描/解析/CRUD     │
+│  ├─ store.ts       Agent/Session 持久化 + key  │
+│  └─ index.ts       路由（REST + SSE + 中断）   │
 └───────┬──────────────────────┬────────────────┘
-        │ MCP protocol          │ OpenAI-compatible
+        │ MCP 协议              │ OpenAI 兼容
   ┌─────▼──────┐         ┌──────▼──────┐
-  │ MCP Servers│         │ LLM API     │
+  │ MCP Servers│         │  LLM API    │
   │ playwright │         │ DeepSeek    │
-  │ filesystem │         │ (or any)    │
+  │ filesystem │         │（或任意）    │
   └────────────┘         └─────────────┘
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 快速启动
 
-### Prerequisites
-- Node.js 22+ (uses built-in `node:sqlite`; no native modules needed)
-- A DeepSeek API key (or any OpenAI-compatible endpoint)
+### 前置要求
+- Node.js 22+（使用内置 `node:sqlite`，无需原生模块）
+- DeepSeek API Key（或任意 OpenAI 兼容服务）
 
-### Run
+### 启动
 
 ```bash
 cd nova-agent
-npm install          # first time
-npm run dev          # starts frontend (5173) + backend (8787)
+npm install          # 首次
+npm run dev          # 同时启动前端(5173) + 后端(8787)
 ```
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8787
+- 前端：http://localhost:5173
+- 后端：http://localhost:8787
 
-### Configure the API Key
-
-Either way (pick one):
-
-1. **From the UI**: open the app → 🔑 button in the sidebar footer → enter your key → save (stored outside the project in `.nova-agent-key.json`)
-2. **Environment variable**: `DEEPSEEK_API_KEY=sk-...`
+### 配置 API Key（任选其一）
+1. **前端**：打开页面 → 侧边栏右下角 🔑 → 输入 key → 保存（存到项目外 `.nova-agent-key.json`）
+2. **环境变量**：`DEEPSEEK_API_KEY=sk-...`
 
 ---
 
-## 📁 Project Structure
+## 📁 目录结构
 
 ```
 nova-agent/
-├─ server/                    # backend
-│  ├─ index.ts                # Express routes (REST + SSE + abort)
-│  ├─ agentLoop.ts            # agent loop (AI SDK streamText + MCP tools)
-│  ├─ compact.ts              # context compaction (LLM summarization)
-│  ├─ mcp.ts                  # MCP client management
-│  ├─ skills.ts               # SKILL.md scan/parse/CRUD
-│  ├─ models.ts               # model registry (builtin + custom providers)
-│  ├─ memory.ts               # long-term memory (LRU + dedup merge)
-│  ├─ scheduler.ts            # scheduled tasks (5-field cron)
-│  ├─ db.ts                   # SQLite init (node:sqlite)
-│  ├─ builtinTools.ts         # built-in tools (web_search, memory search…)
-│  ├─ store.ts                # agent/session persistence + API key
-│  └─ types.ts                # shared types
-├─ src/                       # frontend (React 19 + TS + Zustand)
+├─ server/                    # 后端
+│  ├─ index.ts                # Express 路由（REST + SSE + 中断）
+│  ├─ agentLoop.ts            # Agent 循环（AI SDK streamText + MCP 工具）
+│  ├─ compact.ts              # 上下文压缩（LLM 总结）
+│  ├─ mcp.ts                  # MCP 客户端管理
+│  ├─ skills.ts               # SKILL.md 扫描/解析/CRUD
+│  ├─ models.ts               # 模型注册表（内置 + 自定义提供商）
+│  ├─ memory.ts               # 长期记忆（LRU + 去重合并）
+│  ├─ scheduler.ts            # 定时任务（5 段 cron）
+│  ├─ db.ts                   # SQLite 初始化（node:sqlite）
+│  ├─ builtinTools.ts         # 内置工具（web_search 等）
+│  ├─ store.ts                # Agent/Session 持久化 + API key
+│  └─ types.ts                # 共享类型
+├─ src/                       # 前端（React 19 + TS + Zustand）
 │  ├─ components/             # Sidebar/ChatView/Trajectory/SkillManager/ToolManager...
 │  ├─ store.ts                # Zustand store
-│  ├─ api.ts                  # REST + SSE wrapper
+│  ├─ api.ts                  # REST + SSE 封装
 │  ├─ markdown.ts             # markdown-it + highlight.js
-│  └─ styles.css              # design system (gradient/glass/animations)
-├─ skills/                    # skills (SKILL.md, Agent Skills format)
+│  └─ styles.css              # 设计体系（渐变/玻璃/动画）
+├─ skills/                    # 技能（SKILL.md，Agent Skills 格式）
 │  ├─ browser-ops/SKILL.md
 │  └─ file-ops/SKILL.md
-├─ mcp-servers/               # MCP server configs (JSON)
+├─ mcp-servers/               # MCP server 配置（JSON）
 │  ├─ filesystem.json
 │  └─ playwright.json
-├─ data/                      # runtime data (SQLite DB, gitignored)
-├─ workspace/                 # default agent workspace (configurable in Settings; gitignored)
-├─ docs/                      # developer documentation (architecture/dev guide/changelog)
+├─ data/                      # 运行时数据（SQLite 数据库，不入库）
+├─ workspace/                 # 默认工作区（设置页可配置；不入库）
+├─ docs/                      # 教学文档（课程地图/练习册/走读指南/术语总表）
 └─ package.json
 ```
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ 环境变量
 
-| Env var | Default | Description |
+| 变量 | 默认值 | 说明 |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | — | LLM API key (fallback if no external key file) |
-| `NOVA_AGENT_PORT` | `8787` | Backend port |
-| `NOVA_AGENT_COMPACT_MIN` | `40` | Auto-compact trigger: compress when messages exceed this |
-| `NOVA_AGENT_COMPACT_KEEP` | `20` | Messages kept after compaction (earlier ones are summarized) |
----
-
-## 📂 Workspace (agent file boundary)
-
-By default agents can only touch `workspace/` (inside the project). Like Codex, you can point the workspace at any folder of your choice:
-
-- **Settings → Workspace**: enter a relative path (resolved against the project root) or an absolute path; leave empty to reset to the default `workspace/`. The first run shows a guided picker (skippable); the default `workspace/` always acts as the fallback tool area. Saving auto-reconnects MCP servers that mount the workspace (e.g. `filesystem`) — no restart needed.
-- Uploaded attachments and the **filesystem** MCP server both use this root, so the agent sees exactly the folder you picked.
-- MCP configs can reference it with the `{{workspace}}` placeholder (e.g. `"args": ["node", "server.js", "{{workspace}}/data"]`); args starting with `./` or `../` are resolved against the project root.
-- ⚠️ The workspace *is* the agent's permission boundary. Pointing it at the project root or the API-key directory (both rejected) would grant the agent file access there; pointing it at any other sensitive directory does the same — choose deliberately. Note: switching workspaces makes previously uploaded attachments (stored under the old root) unreachable.
+| `DEEPSEEK_API_KEY` | — | LLM API key（无外部 key 文件时的兜底） |
+| `NOVA_AGENT_PORT` | `8787` | 后端端口 |
+| `NOVA_AGENT_COMPACT_PCT` | `90` | 自动压缩阈值：上下文占用超过模型窗口的该百分比即压缩（token 感知，按最近一次 API 的真实输入计数） |
+| `NOVA_AGENT_COMPACT_MIN` | `40` | 消息数兜底：超过该条数强制压缩（与 token 阈值双条件） |
+| `NOVA_AGENT_COMPACT_KEEP` | `20` | 压缩后保留的最近消息数（更早的由 LLM 总结） |
 
 ---
 
-## 🔧 Extending (no code required)
+## 📂 工作区（Agent 文件边界）
 
-### Add an Agent
-Sidebar → Agents → ＋ → name/persona → check tools & skills → create. Double-click to edit.
+默认 Agent 只能读写项目内 `workspace/`。你可以像 Codex 一样把它指向任意文件夹，作为 Agent 的工作区域：
 
-### Add a Skill (zero code)
-**From the UI**: sidebar → Skill Manager → ＋ → fill the form → create.
-**Or manually**: drop a `skills/<name>/SKILL.md` folder:
+- **设置 → 工作区**：填相对路径（相对项目根解析）或绝对路径；留空 = 重置回默认 `workspace/`。首次运行会引导选择工作区（可跳过，默认 `workspace/` 始终作为兜底工具区）。保存后自动重连挂载工作区的 MCP server（如 filesystem），无需重启
+- 附件上传与 **filesystem** 工具都以它为根——Agent 看到的正是你选的那个文件夹
+- MCP 配置可用 `{{workspace}}` 占位符引用（如 `"args": ["node", "server.js", "{{workspace}}/data"]`）；以 `./` 或 `../` 开头的参数按项目根解析为绝对路径
+- ⚠️ 安全提示：工作区就是 Agent 的权限边界。指向项目根或 API key 文件所在目录（都会被拒绝）等于把该目录的文件访问权交给 Agent；指向其他敏感目录同理——请谨慎选择。另外注意：切换工作区后，旧工作区下的上传附件将不可再预览（附件随工作区走）。
+
+---
+
+## 🔧 扩展方式（零代码）
+
+### 新增 Agent
+侧边栏 Agents 区 ＋ → 填名称 / persona → 勾选工具和技能 → 创建。双击可编辑。
+
+### 新增技能（零代码）
+**前端**：侧边栏 → 技能管理 → ＋ → 填表单（名称 / 简介 / 使用时机 / 正文）→ 创建。
+**或手工**：`skills/<名称>/SKILL.md` 丢一个文件夹。
 
 ```markdown
 ---
-name: skill name
-description: short description
-when_to_use: when to use it
+name: 技能名
+description: 简介
+when_to_use: 使用时机
 ---
-Instructions body (injected into the system prompt)
+操作步骤正文（注入 system prompt）
 ```
 
-### Add a Tool (zero code)
-Drop a JSON config into `mcp-servers/` to connect any MCP server:
+### 新增工具（零代码）
+`mcp-servers/` 加一个 JSON 配置即可接入任意 MCP server：
 
 ```json
 {
   "id": "my-server",
-  "name": "My Tools",
+  "name": "我的工具",
   "command": "npx",
-  "args": ["-y", "some-mcp-server"],
+  "args": ["-y", "某-mcp-server"],
   "timeoutMs": 30000
 }
 ```
 
-### Bundled MCP Servers
+### 内置 MCP Servers
 
-| id | Description |
+| id | 说明 |
 |---|---|
-| `playwright` | [@playwright/mcp](https://github.com/microsoft/playwright-mcp): browser automation (open/click/screenshot/read) |
-| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers): file read/write (**workspace root only**, configurable) |
+| `playwright` | [@playwright/mcp](https://github.com/microsoft/playwright-mcp)：浏览器操作（打开 / 点击 / 截图 / 读取） |
+| `filesystem` | [@modelcontextprotocol/server-filesystem](https://github.com/modelcontextprotocol/servers)：读写文件（**仅限工作区根目录**，可配置） |
 
-### Bundled Skills
+### 内置 Skills
 
-| id | Description |
+| id | 说明 |
 |---|---|
-| `browser-ops` | Browser operations expert (pairs with playwright) |
-| `file-ops` | File operations assistant (pairs with filesystem) |
+| `browser-ops` | 浏览器操作专家（配 playwright） |
+| `file-ops` | 文件操作助手（配 filesystem） |
 
 ---
 
-## 🔒 Security Model
+## 🔒 安全模型
 
-| Layer | Protection |
+| 层 | 保护 |
 |---|---|
-| **Workspace isolation** | filesystem MCP only allows the configured workspace (default `workspace/`); agents cannot read project code |
-| **External key** | API key stored outside the project (`.nova-agent-key.json`), unreachable by agents |
-| **XSS protection** | markdown-it with `html: false`; raw HTML disabled |
-| **Confirm dialogs** | destructive operations require custom confirmation |
-| **Timeout guard** | tool calls default to 120s timeout; structured errors returned to the model |
+| **工作区隔离** | filesystem MCP 只允许访问工作区（默认 `workspace/`，可在设置页配置），Agent 读不到项目代码 |
+| **Key 外置** | API key 存项目外 `.nova-agent-key.json`，Agent 不可达 |
+| **XSS 防护** | markdown-it `html: false`，禁原始 HTML |
+| **确认弹窗** | 删除操作需自定义确认 |
+| **超时保护** | 工具调用默认 120s 超时，超时返回结构化错误给模型 |
 
 ---
 
-## 📄 API Reference
+## 📄 API 一览
 
-| Method | Path | Purpose |
+| 方法 | 路径 | 用途 |
 |---|---|---|
-| GET | `/api/agents` | List agents |
-| POST | `/api/agents` | Create agent |
-| PUT/DELETE | `/api/agents/:id` | Update/delete agent (cascades sessions) |
-| GET | `/api/mcp-servers` | List MCP servers |
-| GET | `/api/mcp-servers/status` | MCP server health status |
-| POST/PUT/DELETE | `/api/mcp-servers/:id` | Add/update/delete MCP server (live, no restart) |
-| POST | `/api/mcp-servers/:id/reconnect` | Reconnect an MCP server |
-| GET | `/api/tools` | All tools + schemas |
-| GET | `/api/models` | Model catalog (builtin + custom providers) |
-| GET/POST | `/api/providers/keys` | Per-provider API key status/save |
-| GET/POST/DELETE | `/api/providers/custom` | Custom provider CRUD |
-| GET/POST/DELETE | `/api/skills` | Skill CRUD |
-| GET/POST | `/api/sessions` | List/create sessions |
-| PUT/DELETE | `/api/sessions/:id` | Rename/delete session |
-| GET | `/api/sessions/:id` | Get session (with messages) |
-| POST | `/api/sessions/:id/compact` | Manually compact context (LLM summarization) |
-| GET/POST/PUT/DELETE | `/api/tasks` | Scheduled task CRUD |
-| POST | `/api/tasks/:id/run` | Run a task on demand |
-| **POST** | **`/api/chat`** | **SSE streaming chat (core)** |
-| POST | `/api/chat/stop` | Abort current run |
-| GET/POST/PUT/DELETE | `/api/memories` | Long-term memory CRUD |
-| GET | `/api/health` | Health check |
+| GET | `/api/agents` | 列 Agent |
+| POST | `/api/agents` | 新建 Agent |
+| PUT/DELETE | `/api/agents/:id` | 编辑 / 删除 Agent（连带会话） |
+| GET | `/api/mcp-servers` | MCP server 清单 |
+| GET | `/api/mcp-servers/status` | MCP server 健康状态 |
+| POST/PUT/DELETE | `/api/mcp-servers/:id` | 增 / 改 / 删 MCP server（动态生效，无需重启） |
+| POST | `/api/mcp-servers/:id/reconnect` | 重连指定 MCP server |
+| GET | `/api/tools` | 全部工具 + schema |
+| GET | `/api/models` | 模型目录（内置 + 自定义提供商） |
+| GET/POST | `/api/providers/keys` | 各 provider key 状态 / 保存 |
+| GET/POST/DELETE | `/api/providers/custom` | 自定义提供商 CRUD |
+| GET/POST/DELETE | `/api/skills` | 技能 CRUD |
+| GET/POST | `/api/sessions` | 会话列表 / 新建 |
+| PUT/DELETE | `/api/sessions/:id` | 重命名 / 删除会话 |
+| GET | `/api/sessions/:id` | 取会话（含消息） |
+| POST | `/api/sessions/:id/compact` | 手动压缩上下文（LLM 总结） |
+| GET/POST/PUT/DELETE | `/api/tasks` | 定时任务 CRUD |
+| POST | `/api/tasks/:id/run` | 手动立即执行任务 |
+| **POST** | **`/api/chat`** | **SSE 流式对话（核心）** |
+| POST | `/api/chat/stop` | 中断当前对话 |
+| GET/POST/PUT/DELETE | `/api/memories` | 长期记忆 CRUD |
+| GET | `/api/health` | 健康检查 |
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ 技术选型
 
-| Layer | Choice | Why |
+| 层 | 选型 | 理由 |
 |---|---|---|
-| Frontend | React 19 + TypeScript + Vite | Type-safe, rich component ecosystem |
-| Backend | Express | One-file simple routing |
-| LLM | Vercel AI SDK + `@ai-sdk/deepseek` | Thin wrapper, framework-agnostic |
-| Tools | **MCP protocol** | Industry standard ("USB-C for AI") |
-| Skills | **Agent Skills** (SKILL.md) | De-facto standard (Claude Code / Cursor) |
-| Animations | CSS keyframes (styles.css) | Zero dependencies |
-
-**Documentation**: [中文文档](./docs/README.zh-CN.md)
+| 前端 | React 19 + TypeScript + Vite | 类型安全，组件生态丰富 |
+| 后端 | Express | 路由简单直接 |
+| LLM | Vercel AI SDK + `@ai-sdk/deepseek` | 薄封装，框架无关 |
+| 工具 | **MCP 协议** | 业界标准（"AI 的 USB-C"） |
+| 技能 | **Agent Skills**（SKILL.md） | Claude Code / Cursor 事实标准 |
+| 动画 | CSS keyframes（styles.css） | 零依赖 |
 
 ---
 
-## 🎓 Learn (self-paced course)
+## 🎓 学习（自定进度课程）
 
-Nova Agent doubles as a **teaching project**: the code is written to be read in one evening, then modified. If you want to actually *learn* how an agent works, follow the course map instead of just skimming files:
+Nova Agent 同时是一份**教学项目**：代码按"一个晚上读完、能跑起来、然后动手改"来写。想真正弄懂 agent 怎么工作，建议别只看文件，按课程走：
 
-- [📚 Course Map（课程地图 · 学习路径）](./docs/guide/README.md) — a three-stage path (入门 → 进阶 → 挑战) across the 8 core files, with per-lesson acceptance criteria
-- [📘 Exercises（练习册）](./docs/exercises/README.md) — hands-on drills per lesson (入门/进阶/挑战), with separate answers so you can self-check honestly
-- [🎓 Capstone（终极验收项目）](./docs/exercises/capstone.md) — re-implement a minimal agent from scratch to graduate
-- [📖 Glossary（术语总表）](./docs/glossary.md) — every term from every walkthrough, in one place
+- [📚 课程地图（学习路径）](./docs/guide/README.md) — 三阶段路径（入门 → 进阶 → 挑战），覆盖 8 个核心文件，每篇带验收标准
+- [📘 练习册](./docs/exercises/README.md) — 每课 3-5 道分级动手题（入门/进阶/挑战），答案分册独立存放，方便诚实自测
+- [🎓 终极验收项目](./docs/exercises/capstone.md) — 从零重写一个最小 agent，通关毕业
+- [📖 术语总表](./docs/glossary.md) — 全部"黑话"一处速查
 
-> This project is **feature-frozen** by design: learning materials are the focus, not new features.
+> 本项目按设计**功能冻结**：重心是教学资料，不是堆功能。
 
 ---
 
