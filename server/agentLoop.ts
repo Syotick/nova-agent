@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { getWorkspacePath } from './workspace.js'
 import type { ChatEvent, Agent, Message, Session, ToolCallRecord, Attachment, ReasoningOption, MessageSegment } from './types.js'
 import { listToolsFor } from './mcp.js'
-import { injectSkills } from './skills.js'
+import { skillCatalog } from './skills.js'
 import { shouldCompact, compactSession, maybePruneToolOutput, isContextWindowExceededError } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
 import { assembleTools, shouldRegisterBuiltin } from './toolRegistry.js'
@@ -197,8 +197,8 @@ export async function runTurn(
     const summaryBlock = session.summary
       ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
       : ''
-    // system prompt = persona + 技能注入 + 历史摘要 + 记忆注入 + 项目说明 + 执行约束 + 记忆指令
-    const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}${memoryInstruction}`
+    // system prompt = persona + 技能目录（懒加载，正文由 load_skill 取） + 历史摘要 + 记忆注入 + 项目说明 + 执行约束 + 记忆指令
+    const system = `${agent.persona}\n${skillCatalog(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}${memoryInstruction}`
 
     // 历史消息（AI SDK 格式）
     const history = session.messages.slice(0, -1).map((m) => ({

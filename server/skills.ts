@@ -47,14 +47,35 @@ export function getSkill(id: string): SkillMeta | undefined {
   return loadSkills().find((s) => s.id === id)
 }
 
-// 把选中的技能拼进 system prompt
-export function injectSkills(skillIds: string[]): string {
+// 把选中的技能拼成"目录块"注入 system prompt —— 只给名字+描述，不给正文。
+// 为什么不是全量注入：技能正文可能很长，全部塞进 prompt 会撑爆 token 并稀释注意力。
+// 目录让模型"知道有什么、什么时候该用"，正文由 load_skill 工具按需取（懒加载，见 toolRegistry.ts）。
+export function skillCatalog(skillIds: string[]): string {
   if (!skillIds.length) return ''
-  const parts = skillIds
+  const entries = skillIds
     .map((id) => getSkill(id))
     .filter((s): s is SkillMeta => s !== undefined)
-    .map((s) => `## Skill: ${s.name}\n${s.whenToUse ? `(使用时机: ${s.whenToUse})\n` : ''}${s.content}`)
-  return parts.length ? `\n\n---\n\n# 可用技能（按需使用）\n\n${parts.join('\n\n')}` : ''
+    .map((s) => `- ${s.name}（使用时机：${s.whenToUse || '未指定'}）：${s.description || '（无描述）'}`)
+  if (!entries.length) return ''
+  return [
+    '\n\n---\n\n# 可用技能（按需加载）',
+    ...entries,
+    '',
+    '使用说明：需要用到某技能时，必须先用 load_skill 工具按名字加载它的完整指令，再照做；禁止仅凭上面这行描述执行。',
+  ].join('\n')
+}
+
+// load_skill 工具的加载函数：按名字（或 id）精确匹配，且必须在该 agent 勾选的技能里。
+// 返回错误原因而不抛异常，让工具以 isError 呈现，模型可据此修正（未知名/未启用）。
+export function loadSkillContent(
+  skillIds: string[],
+  name: string,
+): { ok: true; name: string; id: string; whenToUse: string; content: string } | { ok: false; reason: string } {
+  const all = loadSkills()
+  const hit = all.find((s) => s.name === name) ?? all.find((s) => s.id === name)
+  if (!hit) return { ok: false, reason: `未知技能 "${name}"（可先查看目录里的技能名）` }
+  if (!skillIds.includes(hit.id)) return { ok: false, reason: `技能 "${name}" 未在 Agent 勾选中启用（无法加载）` }
+  return { ok: true, name: hit.name, id: hit.id, whenToUse: hit.whenToUse ?? '', content: hit.content }
 }
 
 // 把 id 转成安全的目录名：保留中文字符和字母数字，其余转连字符

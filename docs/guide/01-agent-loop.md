@@ -141,11 +141,13 @@ const tools = assembleTools(agent, { session, agent, depth, emit, segments, ... 
 内置工具 + MCP 工具走**同一条装配管道**，只是实现来源不同。
 
 ### 6.1 内置工具（toolRegistry.ts 的 builtinToolDefs）——进程内实现
-5 个内置工具集中声明：`run_command / glob / remember / subagent / web_search`。
-每个 = `{ id, name, description, inputSchema, createExecute(runtime) }`：
+6 个内置工具集中声明：`run_command / glob / remember / subagent / web_search / load_skill`。
+每个 = `{ id, name, description, inputSchema, createExecute(runtime), when? }`：
 - **元数据**（名字/描述/参数结构）在注册表集中管理，Agent 配置页按 `builtinTools` 勾选启用
 - **execute 通过 `runtime` 注入依赖**（session / emit / segments / toolResultForModel…），
   不再直接碰主循环内部状态——想加一个内置工具 = 往 `builtinToolDefs` 加一个定义，主循环零改动
+- **条件装配** `when?`：`load_skill` 只在 agent 勾选过技能（`skillIds` 非空）时注册——
+  没勾技能就没有"加载技能"的意义（也没目录），别给模型一个用不上的工具
 - `subagent` 依赖递归（`runTurn`），通过 `runtime.runSubagent` 注入，避免注册表与主循环循环依赖
 - `web_search` 的实现（DeepSeek 原生 + curl 兜底链）仍留在 `server/builtinTools.ts`，
   注册表只负责把它接进 record/事件/修剪管道
@@ -164,12 +166,12 @@ MCP 服务器（filesystem / playwright…）是一个个独立子进程，工�
 ## 7. 核心之二：拼 system prompt（L125-183）
 
 ```ts
-const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}${memoryInstruction}`
+const system = `${agent.persona}\n${skillCatalog(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}${memoryInstruction}`
 ```
 
 一段 system prompt = 六块拼起来：
 1. **persona**：agent 的人设（"你是...用中文回答..."）
-2. **技能**：`injectSkills(agent.skillIds)`——把勾选的技能正文注入（见 skills 篇）
+2. **技能目录**：`skillCatalog(agent.skillIds)`——只给"名字+描述+使用时机"几行（懒加载，正文由 load_skill 工具按需取，见 skills 篇）
 3. **历史摘要**：压缩产生的 `session.summary`（有才注入）
 4. **长期记忆**：`memoryBlock`（L143-144）——`buildMemoryBlock(agent.id, modelUserText, 5)`：按用户输入做词面检索 Top-K + 热度补齐；命中≥3 不补齐避免噪声；注入后 touch 保活（见记忆篇）。记忆没启用（Agent 配置页取消勾选）则为空串
 5. **项目说明**：`projectMemoryBlock`（L134-141）——工作区 `AGENTS.md`（+ `AGENTS.local.md`）项目宪法
@@ -272,7 +274,7 @@ agentLoop.ts（本篇：编排）
  ├── models.ts       → createModelForAgent / buildProviderOptions（模型与思考模式）
  ├── mcp.ts          → listToolsFor / callMcpTool（MCP 工具桥接）
  ├── builtinTools.ts → web_search 实现（DeepSeek 原生 + curl 兜底链）
- ├── skills.ts       → injectSkills（技能注入）
+ ├── skills.ts       → skillCatalog（技能目录，懒加载入口）
  ├── compact.ts      → shouldCompact / compactSession（压缩）
  ├── memory.ts       → buildMemoryBlock / addMemory / loadProjectMemory（记忆）
  ├── terminal.ts     → executeCommand / killSessionProcesses（run_command）

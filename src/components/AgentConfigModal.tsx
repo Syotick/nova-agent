@@ -11,7 +11,7 @@ import type { Agent } from '../types'
 
 const PALETTE = ['#4d6bfe', '#8b7bff', '#38bdf8', '#34d399', '#fbbf24', '#f87171', '#f472b6', '#22d3ee']
 
-// 内置工具勾选清单（与后端 BUILTIN_TOOL_IDS 对应）
+// 内置工具勾选清单（与后端 builtinToolDefs 对应；load_skill 不进清单——它随"勾选技能"自动装配）
 const BUILTIN_TOOLS: Array<{ id: string; label: string; desc: string }> = [
   { id: 'web_search', label: '搜索', desc: '在线搜索' },
   { id: 'run_command', label: '终端', desc: '执行命令/启动项目' },

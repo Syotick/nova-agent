@@ -17,6 +17,7 @@ import { executeCommand } from './terminal.js'
 import { executeGlob } from './glob.js'
 import { newId } from './store.js'
 import { addMemory } from './memory.js'
+import { loadSkillContent } from './skills.js'
 
 // 工具调用 id（与事件/轨迹共用同一 id，前端靠它关联工具卡）
 function uid(): string {
@@ -52,6 +53,8 @@ export interface ToolDef {
   description: string
   inputSchema: Record<string, unknown>
   createExecute: (rt: ToolRuntime) => (args: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }>
+  /** 条件装配：返回 false 时该工具不注册（如 load_skill 只在 agent 勾选过技能时才有意义） */
+  when?: (agent: Agent) => boolean
 }
 
 // 创建一条"工具调用记录"并广播 start（内置工具公共样板）
@@ -282,16 +285,50 @@ const webSearchDef: ToolDef = {
   },
 }
 
+const loadSkillDef: ToolDef = {
+  id: 'load_skill',
+  name: 'load_skill',
+  description:
+    '按名字加载一个技能的完整指令（懒加载）。目录只给了技能名和一句话描述，真正要照做时必须先加载全文。' +
+    '只能加载当前 Agent 勾选启用的技能；未勾选或名字打错会返回错误原因。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '技能名字（见目录，如"浏览器操作专家"）' },
+    },
+    required: ['name'],
+  },
+  // 条件装配：没勾任何技能就没有目录，load_skill 也无意义——别给模型一个用不上的工具
+  when: (agent) => agent.skillIds.length > 0,
+  createExecute: (rt) => async (args) => {
+    const name = String((args as { name?: unknown }).name ?? '').trim()
+    const record = startRecord(rt, 'load_skill', args)
+    if (!name) {
+      endRecord(rt, record, 'error', 'ERROR: name required')
+      return { content: 'Error: name 参数必填（技能名字）', isError: true }
+    }
+    const res = loadSkillContent(rt.agent.skillIds, name)
+    if (!res.ok) {
+      endRecord(rt, record, 'error', `ERROR: ${res.reason}`)
+      return { content: `Error: ${res.reason}`, isError: true }
+    }
+    const out = `## Skill: ${res.name}（id: ${res.id}）\n${res.whenToUse ? `(使用时机: ${res.whenToUse})\n` : ''}${res.content}`
+    endRecord(rt, record, 'success', out)
+    return rt.toolResultForModel({ content: out }, record)
+  },
+}
+
 // 全部内置工具定义（Agent 配置页"内置工具"勾选的就是这些 id；未配置/空数组 = 全部启用）
-export const builtinToolDefs: ToolDef[] = [runCommandDef, globDef, rememberDef, subagentDef, webSearchDef]
+export const builtinToolDefs: ToolDef[] = [runCommandDef, globDef, rememberDef, subagentDef, webSearchDef, loadSkillDef]
 // 是否应为该 agent 装配某内置工具（语义与 builtinTools.shouldRegisterBuiltin 一致，re-export 统一入口）
 export { shouldRegisterBuiltin }
 
 // ---------- 装配：把"内置 + MCP"统一注册成 AI SDK 工具对象 ----------
 
-// 内置工具装配：按 Agent 勾选过滤，生成 AI SDK tool
+// 内置工具装配：按 Agent 勾选过滤 + 条件装配，生成 AI SDK tool
 function registerBuiltin(agent: Agent, rt: ToolRuntime, tools: Record<string, unknown>) {
   for (const def of builtinToolDefs) {
+    if (def.when && !def.when(agent)) continue
     if (!shouldRegisterBuiltin(agent.builtinTools, def.id)) continue
     tools[def.name] = tool({
       description: def.description,

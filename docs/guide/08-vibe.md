@@ -141,7 +141,7 @@ const deadline = Date.now() + Math.max(1, opts.maxMinutes ?? DEFAULT_MAX_MINUTES
 | 01 agentLoop | 单轮怎么转（模型↔工具循环 + prompt 拼装 + 中断） |
 | 02 mcp | 外部工具怎么变成 agent 的手（进程管理 + 健康检查 + 重连） |
 | 03 terminal | 命令执行 + 进程生命周期（超时/中断杀树 + 平台坑） |
-| 04 skills | 技能系统：文件即能力、两级加载省 token |
+| 04 skills | 技能系统：文件即能力、目录 + 按需加载省 token |
 | 05 memory | 记忆：文件级约定 + 自动提取 + 去重归并 |
 | 06 compact | 长对话不爆：真实计数 + 双兜底压缩 |
 | 07 workspace | 文件权限边界：默认兜底 + 危险目标拒绝 + 占位符联动 |

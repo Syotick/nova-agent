@@ -5,7 +5,7 @@
 ## 🎯 本课练习目标
 
 - 能手写一个 SKILL.md 并让它生效（目录即安装）
-- 能解释"两级加载"如何省 token
+- 能解释"目录 + load_skill 按需加载"如何省 token
 - 能说出删除技能那行白名单校验为什么必要
 
 ---
@@ -44,19 +44,19 @@
 
 ---
 
-### 练习 3：两级加载省 token（进阶）
+### 练习 3：目录 + 按需加载省 token（进阶）
 
-**目标**：验证"不勾选就不注入"。
+**目标**：验证"system 只进目录几行，正文由 load_skill 按需取"。
 
 **步骤**：
 
-1. 读 `injectSkills` 与 `agentLoop.ts` 里调用它的那行（system prompt 拼装处）。
-2. 回答：一个 agent 有 10 个技能、只勾 2 个，system prompt 里会注入几个技能的正文？
-3. 临时给 `injectSkills` 加一行 `console.log`，输出它拼出的长度，对比勾 2 个 vs 全勾，看 token 差异。
+1. 读 `skillCatalog` 与 `loadSkillContent`（`server/skills.ts`），以及 `toolRegistry.ts` 里 `load_skill` 工具（注意它的 `when:` 条件装配）。
+2. 回答：一个 agent 有 10 个技能、只勾 2 个，system prompt 里会进去多少内容？模型要用某技能时怎么做？
+3. 临时给 `skillCatalog` 加一行 `console.log`，输出它拼出的字符串——对比"勾 2 个 vs 全勾"，验证目录长度几乎不变（都是几行），而正文根本不在里面。
 
-**预期结果（自检）**：答出"只注入勾选的 2 个"；日志确认注入长度随勾选数量变化。
+**预期结果（自检）**：答出"只进目录（每技能一行名字+描述+时机），正文不在 system 里；模型要用时调 `load_skill` 按名取全文"；日志确认目录不随技能多少爆炸。
 
-**提示**：`agent.skillIds` 是"这个 agent 勾选的"清单，`getSkill(id)` 只取清单里的。
+**提示**：`agent.skillIds` 是"这个 agent 勾选的"清单；`load_skill` 只在勾选过技能时才注册（`when: agent.skillIds.length > 0`）。
 
 ---
 

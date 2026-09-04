@@ -17,14 +17,14 @@ beforeEach(() => {
   db.prepare('DELETE FROM memories WHERE agent_id = ?').run(TEST_AGENT)
 })
 
-function makeAgent(builtinTools?: string[]): Agent {
+function makeAgent(builtinTools?: string[], skillIds: string[] = []): Agent {
   return {
     id: TEST_AGENT,
     name: 'test',
     persona: '',
     model: 'deepseek/deepseek-v4-flash',
     mcpServerIds: [],
-    skillIds: [],
+    skillIds,
     builtinTools,
     color: '#4d6bfe',
     createdAt: Date.now(),
@@ -49,9 +49,9 @@ function makeRt(agent: Agent): ToolRuntime {
 }
 
 describe('toolRegistry 定义完整性', () => {
-  it('5 个内置工具定义齐全，元数据完整', () => {
+  it('6 个内置工具定义齐全，元数据完整', () => {
     const names = builtinToolDefs.map((d) => d.name).sort()
-    expect(names).toEqual(['glob', 'remember', 'run_command', 'subagent', 'web_search'])
+    expect(names).toEqual(['glob', 'load_skill', 'remember', 'run_command', 'subagent', 'web_search'])
     for (const def of builtinToolDefs) {
       expect(def.description.length).toBeGreaterThan(10)
       expect(def.inputSchema.type).toBe('object')
@@ -74,7 +74,15 @@ describe('toolRegistry 装配（assembleTools）', () => {
 
   it('未配置 builtinTools = 全部内置工具可用', () => {
     const tools = assembleTools(makeAgent(undefined), makeRt(makeAgent(undefined)), [])
+    // 注意：load_skill 是条件装配——没勾技能（skillIds=[]）时不注册
     expect(Object.keys(tools).sort()).toEqual(['glob', 'remember', 'run_command', 'subagent', 'web_search'])
+  })
+
+  it('load_skill：勾选了技能才装配（条件装配）', () => {
+    const withSkill = assembleTools(makeAgent(undefined, ['browser-ops']), makeRt(makeAgent(undefined, ['browser-ops'])), [])
+    expect(Object.keys(withSkill)).toContain('load_skill')
+    const withoutSkill = assembleTools(makeAgent(undefined), makeRt(makeAgent(undefined)), [])
+    expect(Object.keys(withoutSkill)).not.toContain('load_skill')
   })
 
   it('MCP 工具撞名内置工具：内置优先，不覆盖核心能力', () => {
@@ -142,5 +150,40 @@ describe('toolRegistry 工具执行（最小 runtime）', () => {
     const res = await rememberTool.execute({})
     expect(res.isError).toBe(true)
     expect(rt.executedToolCalls[0].status).toBe('error')
+  })
+})
+
+describe('toolRegistry load_skill（按需加载技能全文）', () => {
+  it('已勾选技能：按名字加载返回全文，事件/记录齐全', async () => {
+    const agent = makeAgent(undefined, ['browser-ops'])
+    const rt = makeRt(agent)
+    const tools = assembleTools(agent, rt, [])
+    const loader = tools['load_skill'] as { execute: (args: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }> }
+    const res = await loader.execute({ name: '浏览器操作专家' })
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('Playwright MCP 工具') // 加载到的是全文
+    expect(rt.executedToolCalls.length).toBe(1)
+    expect(rt.executedToolCalls[0].name).toBe('load_skill')
+    expect(rt.executedToolCalls[0].status).toBe('success')
+  })
+
+  it('未勾选技能：拒绝加载（勾选即授权）', async () => {
+    const agent = makeAgent(undefined, ['browser-ops'])
+    const rt = makeRt(agent)
+    const tools = assembleTools(agent, rt, [])
+    const loader = tools['load_skill'] as { execute: (args: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }> }
+    const res = await loader.execute({ name: '文件操作' })
+    expect(res.isError).toBe(true)
+    expect(res.content).toContain('未在 Agent 勾选中启用')
+    expect(rt.executedToolCalls[0].status).toBe('error')
+  })
+
+  it('缺 name：报错', async () => {
+    const agent = makeAgent(undefined, ['browser-ops'])
+    const rt = makeRt(agent)
+    const tools = assembleTools(agent, rt, [])
+    const loader = tools['load_skill'] as { execute: (args: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }> }
+    const res = await loader.execute({})
+    expect(res.isError).toBe(true)
   })
 })

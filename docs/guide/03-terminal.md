@@ -191,4 +191,4 @@ terminal.ts（本篇：agent 的双手）
  └── Node child_process（spawn）/ path / fs
 ```
 
-下一篇（04）建议：`server/skills.ts` —— 技能系统：SKILL.md 怎么两级加载、按需注入省 token。
+下一篇（04）建议：`server/skills.ts` —— 技能系统：SKILL.md 目录 + load_skill 按需加载省 token。

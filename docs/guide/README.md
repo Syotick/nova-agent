@@ -15,7 +15,7 @@
 
 进阶（一周内）── 能讲清楚"agent 的能力从哪来、怎么管"
  ├─ 03 run_command：agent 的双手 + 进程生命周期（含 Windows 平台坑）
- ├─ 04 技能系统：SKILL.md 文件即能力、两级加载省 token
+ ├─ 04 技能系统：SKILL.md 文件即能力、目录 + 按需加载省 token
  └─ 05 记忆系统：模型怎么"记得你"（LRU + 去重合并 + AGENTS.md）
 
 挑战（一周内）── 能讲清楚"长对话怎么不爆、边界怎么守住、怎么自己干完一件事"
@@ -53,7 +53,7 @@ flowchart LR
 | [01](01-agent-loop.md) | 入门 | `server/agentLoop.ts` | Agent 循环：一个 agent 怎么转起来 | 无 | 讲清楚"一轮对话里模型↔工具怎么循环"；指出 7 个阶段的顺序与各自目的；说出 `streamText` 帮你做了什么、你在外围做了什么 |
 | [02](02-mcp.md) | 入门 | `server/mcp.ts` | MCP 客户端：怎么把外部工具变成 agent 的手 | 01 | 讲清 MCP 的"server=独立进程 / client=我们"模型；说出连接 4 步；解释指数退避重连为什么有必要 |
 | [03](03-terminal.md) | 进阶 | `server/terminal.ts` | run_command：双手 + 进程生命周期 | 01 | 解释"为什么杀进程要杀整棵树"；说出两个 Windows 平台坑；说明超时≠失败的设计意图 |
-| [04](04-skills.md) | 进阶 | `server/skills.ts` | 技能系统：SKILL.md 两级加载 | 01 | 写一个自己的 SKILL.md 并让它生效；解释"两级加载"如何省 token；指出删除技能那行白名单校验为什么必要 |
+| [04](04-skills.md) | 进阶 | `server/skills.ts` | 技能系统：SKILL.md 目录 + 按需加载 | 01 | 写一个自己的 SKILL.md 并让它生效；解释"目录 + 按需加载"如何省 token；指出删除技能那行白名单校验为什么必要 |
 | [05](05-memory.md) | 进阶 | `server/memory.ts` | 跨会话记忆：模型怎么记得你 | 01、04 | 说出记忆写入的"防膨胀三连"；解释为什么不上向量库；区分记忆表与 AGENTS.md 的分工 |
 | [06](06-compact.md) | 挑战 | `server/compact.ts` | 上下文压缩：长对话不爆 | 01 | 解释"真实计数优先 + 条数兜底"的双触发；说出为什么摘要放独立字段；讲清"溢出恢复 + 工具结果修剪"两条护栏怎么兜底 |
 | [07](07-workspace.md) | 挑战 | `server/workspace.ts` | 工作区：agent 的文件权限边界 | 01、02 | 说出三类被拒绝的"危险目标"及理由；解释大小写不敏感比较为何必要；说明 `{{workspace}}` 占位符的联动 |
