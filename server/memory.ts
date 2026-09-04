@@ -281,3 +281,23 @@ export function recentMemories(agentId: string, limit = 5): Memory[] {
   ).all(agentId, limit) as Record<string, unknown>[]
   return rows.map(rowToMemory)
 }
+
+// 注入块构建：检索 Top-K + 热度补齐 + touch 保活，返回拼好的 system 注入块（空 = 无记忆可注）。
+// 放在本模块而非 agentLoop——记忆的"如何检索/如何拼块/如何保活"与主循环解耦；
+// agentLoop 只负责"是否启用"（可插拔开关）后调用它。
+export function buildMemoryBlock(agentId: string, query: string, limit = 5): string {
+  try {
+    const hits = searchMemories(agentId, query, limit)
+    // 词面命中 ≥ 3 时不再热度补齐（避免无关记忆进 prompt）
+    const recents = hits.length < 3
+      ? recentMemories(agentId, Math.max(0, limit - hits.length))
+      : []
+    const all = [...hits, ...recents.filter((r) => !hits.some((h) => h.id === r.id))]
+    if (!all.length) return ''
+    // 注入过的记忆保活（LRU 淘汰时保护高频记忆）
+    touchMemories(all.map((m) => m.id))
+    return `\n\n---\n\n# 长期记忆（跨会话）\n以下是与本次问题相关的、之前会话中确认过的信息，回答时优先参考（与当前事实冲突时以最新对话为准）：\n${all.map((m) => `- ${m.content}`).join('\n')}`
+  } catch {
+    return ''
+  }
+}

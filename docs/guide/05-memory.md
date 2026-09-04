@@ -158,6 +158,20 @@ export function searchMemories(agentId, query, limit = 5): Memory[] {
 - 命中不足 3 条时，用 `recentMemories`（**最近使用**，last_used_at 降序）补齐到 5 条——"我有什么偏好"这种无共同词的问题，靠**热度**兜底（而不是纯按创建时间，后者可能塞进一条从没被用过的旧偏好）
 - 注入完 `touchMemories` 给命中条刷新 last_used_at 保活（热度 + LRU 共用这一个时间戳）
 
+### 可插拔：记忆是"一键开关"，改动不碰主循环
+
+记忆不是 agentLoop 里焊死的一块——它在 Agent 配置页"内置工具"里有一个 **"记忆"勾选**，这一个开关同时管住三处：
+
+| 链路 | 位置 | 开关作用 |
+|---|---|---|
+| remember 工具 | agentLoop 工具注册 | 取消勾选 → 模型不再能写入记忆 |
+| 记忆注入块 | agentLoop 的 system 组装 | 取消勾选 → 不再检索/注入（`memoryBlock=''`） |
+| 记忆指令段 | agentLoop 的 system 组装 | 取消勾选 → 不再提示模型"用 remember" |
+
+**解耦的落点**：检索/拼块/保活全在 `memory.ts` 的 `buildMemoryBlock(agentId, query)` 里，agentLoop 只留一行开关判断（`memoryEnabled ? buildMemoryBlock(...) : ''`）。想"拔掉"记忆 = 取消一个勾选，整条链路干净退出；想改检索逻辑 = 只动 `memory.ts`，主循环零改动。这就是"**机制可插拔、改动解耦**"——学习时你把记忆这块连根拔起也不影响 agent 循环本身。
+
+（`shouldRegisterBuiltin` 语义：未配置/空数组 = 全部启用，所以旧数据默认开，向后兼容。）
+
 ---
 
 ## 6.5 记忆系统只剩一层便签？这里的第二、三道防线
@@ -236,7 +250,8 @@ export function consolidateMemories(agentId): number {
 - [ ] 能说出"短侧覆盖率"比经典 Jaccard 好在哪（判断"A 是不是 B 的补充/改写"）
 - [ ] 能解释检索综合分"覆盖率 × 0.7 + 热度 × 0.3"：覆盖率解决"长记忆命中一词虚高"的公平，热度解决"最近常用"的时效，且先词面过滤再打分（热度不会把无关记忆带进来）
 - [ ] 能说出注入补齐从"最近创建"换成"最近使用"（recentMemories）的动机：无共同词提问时，该补的是"用户常提的"，不是"刚写的"
-- [ ] 动手：让 agent 记住一条偏好，换种说法再让它"更新"同一条，看 `merged` 生效；多用其中一条几次看它在管理页浮到前面
+- [ ] 能说出记忆"一键可插拔"的开关与三处联动（remember 工具 / 注入块 / 指令段），以及 buildMemoryBlock 把逻辑收进 memory.ts 的解耦点
+- [ ] 动手：让 agent 记住一条偏好，换种说法再让它"更新"同一条，看 `merged` 生效；多用其中一条几次看它在管理页浮到前面；再到 Agent 配置页取消"记忆"勾选，确认工具+注入+指令整条链路关闭
 
 > 卡住了？回头读对应小节；做完这 7 条再进 [练习册 05](../exercises/05-memory.md)。
 

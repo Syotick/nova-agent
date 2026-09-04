@@ -7,6 +7,7 @@ import { db } from '../db.js'
 import {
   addMemory, deleteMemory, listMemories, searchMemories, updateMemory, consolidateMemories,
   similarity, loadProjectMemory, MEMORY_LIMIT, MEMORY_MAX_LENGTH, recencyFactor, recentMemories,
+  buildMemoryBlock,
 } from '../memory.js'
 
 // 用独立 agentId 隔离测试数据（memories 外键引用 agents，需先建测试 agent）
@@ -174,6 +175,34 @@ describe('memory 最近使用列表（recentMemories）', () => {
     ins.run('mem_rec_c', TEST_AGENT, '丙记忆', 'manual', now, now - 50 * 86_400_000)
     const recents = recentMemories(TEST_AGENT, 3)
     expect(recents.map((m) => m.content)).toEqual(['甲记忆', '乙记忆', '丙记忆'])
+  })
+})
+
+describe('memory 注入块构建（buildMemoryBlock，可插拔解耦）', () => {
+  it('有词面命中 → 返回含内容与标题的注入块', () => {
+    addMemory(TEST_AGENT, '用户喜欢简洁的回答', 'auto')
+    const block = buildMemoryBlock(TEST_AGENT, '请简洁回答我', 5)
+    expect(block).toContain('长期记忆')
+    expect(block).toContain('用户喜欢简洁的回答')
+  })
+
+  it('无词面命中但有最近使用 → 热度补齐进注入块', () => {
+    addMemory(TEST_AGENT, '用户喜欢表格化输出', 'auto')
+    // 无共同词的问题：词面检索空 → 靠热度补齐兜底
+    const block = buildMemoryBlock(TEST_AGENT, '今天天气怎么样', 5)
+    expect(block).toContain('用户喜欢表格化输出')
+  })
+
+  it('完全无记忆 → 返回空串（不注入占位）', () => {
+    expect(buildMemoryBlock(TEST_AGENT, '任意问题', 5)).toBe('')
+  })
+
+  it('注入后 touch 保活：命中条 last_used_at 被刷新', () => {
+    const { memory } = addMemory(TEST_AGENT, '用户喜欢极简风格', 'auto')
+    const oldUsed = memory.lastUsedAt
+    buildMemoryBlock(TEST_AGENT, '极简风格', 5)
+    const updated = listMemories(TEST_AGENT).find((m) => m.id === memory.id)
+    expect(updated?.lastUsedAt).toBeGreaterThanOrEqual(oldUsed)
   })
 })
 
