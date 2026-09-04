@@ -1,8 +1,7 @@
 {
   "name": "nova-agent",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Nova Agent - a lightweight, self-contained open-source AI agent (Claude Code mini): agent loop, MCP tools, Agent Skills, scheduled tasks, multi-agent management.",
-
   "type": "module",
   "license": "MIT",
   "author": "Syotick <Syotick@users.noreply.github.com>",
