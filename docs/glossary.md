@@ -13,6 +13,7 @@
 | **MCP（Model Context Protocol）** | 让 AI 工具"即插即用"的开放协议（AI 界的 USB-C）。约定了 server 和 client 怎么说话 |
 | **MCP server** | 工具的**提供方**，是一个独立进程（任意语言），通过标准输入输出（stdio）对话。例：filesystem、playwright |
 | **MCP client** | 工具的**连接方**（本项目就是）。负责拉起 server 进程、握手、拿工具清单、调用工具 |
+| **统一工具注册表（ToolRegistry）** | 内置工具 + MCP 工具走同一条装配管道（`server/toolRegistry.ts`）。内置定义 `{id,description,inputSchema,createExecute(runtime)}`，MCP 用同一套 record/事件/修剪包装——可插拔、可分配、主循环只留一行装配 |
 | **stdio（标准输入/输出）** | 进程与外界交换数据的默认通道。MCP server 的"程序入口"就是一行行 json 从 stdin 进、从 stdout 出——不用开端口 |
 | **Agent Skills（技能）** | 给 agent 的"操作手册"（SKILL.md），Claude Code / Cursor 等多家用的事实标准 |
 | **SKILL.md** | 技能的文件格式。一个文件夹一个技能：frontmatter（身份证）+ 正文（操作手册） |

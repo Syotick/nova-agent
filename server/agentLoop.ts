@@ -4,15 +4,14 @@ import type { SharedV4ProviderOptions } from '@ai-sdk/provider'
 import { join } from 'node:path'
 import { getWorkspacePath } from './workspace.js'
 import type { ChatEvent, Agent, Message, Session, ToolCallRecord, Attachment, ReasoningOption, MessageSegment } from './types.js'
-import { listToolsFor, callMcpTool } from './mcp.js'
+import { listToolsFor } from './mcp.js'
 import { injectSkills } from './skills.js'
 import { shouldCompact, compactSession, maybePruneToolOutput, isContextWindowExceededError } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
-import { builtinTools, shouldRegisterBuiltin } from './builtinTools.js'
+import { assembleTools, shouldRegisterBuiltin } from './toolRegistry.js'
 import { newId } from './store.js'
-import { addMemory, buildMemoryBlock, loadProjectMemory } from './memory.js'
-import { executeCommand, killSessionProcesses } from './terminal.js'
-import { executeGlob } from './glob.js'
+import { buildMemoryBlock, loadProjectMemory } from './memory.js'
+import { killSessionProcesses } from './terminal.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
 // （可环境变量覆盖：NOVA_AGENT_MAX_STEPS）
@@ -102,329 +101,31 @@ export async function runTurn(
     modelUserText = `${userText}\n\n[用户上传了 ${attachments.length} 个附件，可用文件系统工具读取：]\n${list}`
   }
 
-  // 组装 MCP 工具
+  // 统一工具装配：内置（按 Agent 勾选）+ MCP（按 agent.mcpServerIds 拉取），见 toolRegistry.ts。
+  // 想加工具 = 往 builtinToolDefs 加定义 / 配一个 MCP server，主循环零改动（可插拔、可分配、解耦）。
+  // 时间线分段：文本与工具按发生顺序交错（DSH 风格）
+  const segments: MessageSegment[] = []
+  // 实际执行的工具调用记录（execute 端收集：output/状态/耗时完整，与前端事件同源；
+  // AI SDK v7 的 step.toolCalls 不含 result，无法从中取输出）
+  const executedToolCalls: ToolCallRecord[] = []
   const mcpTools = await listToolsFor(agent.mcpServerIds)
-  const tools: Record<string, unknown> = {}
-  for (const t of mcpTools) {
-    tools[t.name] = tool({
-      description: t.description,
-      inputSchema: jsonSchema(t.inputSchema as Record<string, unknown>),
-      execute: async (args) => {
-        const record: ToolCallRecord = {
-          id: uid(),
-          name: t.name,
-          input: args,
-          output: '',
-          status: 'running',
-          startedAt: Date.now(),
-          durationMs: 0,
-        }
-        segments.push({ kind: 'tool', call: record })
-        emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-        try {
-          const out = await callMcpTool(t.serverId, t.name, args, t.timeoutMs ?? 120000)
-          record.output = out
-          record.status = 'success'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return toolResultForModel({ content: out }, record)
-        } catch (err) {
-          record.output = `ERROR: ${(err as Error).message}`
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: `Error: ${(err as Error).message}`, isError: true }
-        }
-      },
-    })
-  }
-
-  // 内置工具：web_search（所有 Agent 自动拥有）
-  if (shouldRegisterBuiltin(agent.builtinTools, 'web_search')) for (const bt of builtinTools) {
-    tools[bt.name] = tool({
-      description: bt.description,
-      inputSchema: jsonSchema(bt.inputSchema),
-      execute: async (args) => {
-        let current: ToolCallRecord | null = null
-        const res = await bt.execute(args as Record<string, unknown>, {
-          onStart: (record) => {
-            current = record
-            segments.push({ kind: 'tool', call: record })
-            emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-          },
-          onEnd: (record) => {
-            executedToolCalls.push(record)
-            emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          },
-        })
-        return toolResultForModel(res, current ?? undefined)
-      },
-    })
-  }
-
-  // 内置工具：subagent（子 Agent 编排，所有 Agent 自动拥有）
-  // 子任务 = 内存临时会话 + 完整独立 loop（无 SSE）；只把最终文本/结构化错误交回主 Agent。
-  // 失败策略：返回原因 + 部分产出，由主 Agent 决策，不盲目重试、禁止编造结果。
-  if (shouldRegisterBuiltin(agent.builtinTools, 'subagent')) tools['subagent'] = tool({
-    description:
-      '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），完成后返回其最终结论。' +
-      '适合：多个方向并行探索、独立审查、把大任务拆成小任务。task 必须是自包含的描述（目标+约束+交付格式）。' +
-      '失败处理：子任务返回 ERROR 时——有明确原因就修正 task 后重试最多 1 次；有部分产出就基于部分产出继续；不可恢复就停止并告知用户，禁止编造子任务结果。',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        task: { type: 'string', description: '子任务描述（自包含：目标 + 约束 + 交付格式）' },
-        model: { type: 'string', description: '可选：子 Agent 模型（provider/model），默认继承当前 Agent' },
-      },
-      required: ['task'],
-    }),
-    execute: async (args) => {
-      const task = String((args as { task?: unknown }).task ?? '').trim()
-      const modelOverride = String((args as { model?: unknown }).model ?? '').trim() || undefined
-      const record: ToolCallRecord = {
-        id: uid(),
-        name: 'subagent',
-        input: args,
-        output: '',
-        status: 'running',
-        startedAt: Date.now(),
-        durationMs: 0,
-      }
-      segments.push({ kind: 'tool', call: record })
-      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-      try {
-        if (!task) {
-          record.output = 'ERROR: task required'
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: 'Error: task 参数必填', isError: true }
-        }
-        // 深度限制：防止无限递归（每层都是完整 loop，成本随深度爆炸）
-        if (depth >= MAX_SUBAGENT_DEPTH) {
-          record.output = `ERROR: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层）`
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: `Error: 子任务嵌套过深（最多 ${MAX_SUBAGENT_DEPTH} 层），请直接在当前层完成`, isError: true }
-        }
-
-        // 子任务：内存临时会话（不入库），完整独立 loop，静默执行（no-op emit）
-        const subSession: Session = {
-          id: newId('sub'),
-          agentId: agent.id,
-          title: `[子任务] ${task.slice(0, 30)}`,
-          messages: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        }
-        const subAgent = modelOverride ? { ...agent, model: modelOverride } : agent
-
-        // 中断传播：主 turn 中断时连带 abort 子任务（防幽灵执行）
-        const subs = activeSubruns.get(session.id) ?? new Set<() => void>()
-        activeSubruns.set(session.id, subs)
-        const abortChild = () => abortRun(subSession.id)
-        subs.add(abortChild)
-
-        const partialOf = () => {
-          const last = [...subSession.messages].reverse().find((m) => m.role === 'assistant')
-          return last?.content?.trim() ? last.content.slice(0, 500) : ''
-        }
-        try {
-          const msg = await runTurn(subSession, subAgent, task, () => {}, undefined, undefined, depth + 1)
-          if (msg.content) {
-            record.output = msg.content
-            record.status = 'success'
-            record.durationMs = Date.now() - record.startedAt
-            executedToolCalls.push(record)
-            emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-            return toolResultForModel({ content: msg.content }, record)
-          }
-          // 子任务未产出内容（中断等）：附上部分产出，让主 Agent 判断
-          const partial = partialOf()
-          const out = `Error: 子任务未产出内容${partial ? `。部分产出：${partial}` : ''}`
-          record.output = out
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: out, isError: true }
-        } catch (err) {
-          // 子任务执行失败（模型 401/网络等）：返回原因 + 部分产出（诊断上下文，避免主 Agent 盲重试/编造）
-          const partial = partialOf()
-          const out = `Error: 子任务失败（${(err as Error).message}）${partial ? `。部分产出：${partial}` : ''}`
-          record.output = out
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: out, isError: true }
-        } finally {
-          subs.delete(abortChild)
-          if (subs.size === 0) activeSubruns.delete(session.id)
-        }
-      } catch (err) {
-        record.output = `ERROR: ${(err as Error).message}`
-        record.status = 'error'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return { content: `Error: 子任务调度失败（${(err as Error).message}）`, isError: true }
-      }
+  const tools = assembleTools(
+    agent,
+    {
+      session,
+      agent,
+      depth,
+      emit,
+      segments,
+      executedToolCalls,
+      toolResultForModel,
+      runSubagent: runTurn,
+      subagentDepthLimit: MAX_SUBAGENT_DEPTH,
+      activeSubruns,
+      abortRun,
     },
-  })
-
-  // 内置工具：glob（文件名模式匹配，Claude Code 六大核心编程工具之一——所有 Agent 自动拥有）
-  // 在"要改哪些文件/项目里有哪些文件"时比 search_files 更合适（按文件名而非内容）
-  if (shouldRegisterBuiltin(agent.builtinTools, 'glob')) tools['glob'] = tool({
-    description:
-      '按文件名模式在工作区中查找文件，返回相对工作区的路径列表。' +
-      '支持 glob 语法：*（一段内任意字符）、**（跨任意层目录）、?（单个字符），如 "**/*.ts"、"src/**/*.md"、"package.json"。' +
-      '适合先了解项目结构/定位要修改的文件（按文件名），搜索文件内容请用 search_files。',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        pattern: { type: 'string', description: 'glob 文件名模式（如 **/*.ts）' },
-        cwd: { type: 'string', description: '相对工作区的搜索起点（可选；默认工作区根）' },
-      },
-      required: ['pattern'],
-    }),
-    execute: async (args) => {
-      const record: ToolCallRecord = {
-        id: uid(),
-        name: 'glob',
-        input: args,
-        output: '',
-        status: 'running',
-        startedAt: Date.now(),
-        durationMs: 0,
-      }
-      segments.push({ kind: 'tool', call: record })
-      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-      try {
-        const res = executeGlob(args as never)
-        record.output = res.content
-        record.status = res.isError ? 'error' : 'success'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return toolResultForModel(res, record)
-      } catch (err) {
-        record.output = `ERROR: ${(err as Error).message}`
-        record.status = 'error'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return { content: `Error: 匹配失败（${(err as Error).message}）`, isError: true }
-      }
-    },
-  })
-
-  // 内置工具：run_command（终端执行，Codex 模式核心——所有 Agent 自动拥有）
-  // 工作区即项目：命令默认在工作区根执行，可指定子目录；超时自动终止进程树；
-  // 会话中断（用户停止/连接断开）时由 abortRun -> killSessionProcesses 清理
-  if (shouldRegisterBuiltin(agent.builtinTools, 'run_command')) tools['run_command'] = tool({
-    description:
-      '在工作区（你的项目目录）执行 shell 命令（npm / git / node 等），返回命令输出。' +
-      '改完代码后用这个工具跑构建/测试/启动（如 npm run build / npm test / npm run dev）验证你的改动。' +
-      '命令必须非交互（不能等待输入）；超时（默认 120s）会自动终止进程并保留已收集的输出，启动类命令通常按超时处理——根据输出判断服务是否已经启动成功。',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: '要执行的 shell 命令（非交互）' },
-        cwd: { type: 'string', description: '工作区内的子目录（可选；默认工作区根）' },
-        timeoutMs: { type: 'number', description: '超时毫秒（可选；默认 120000，上限 600000）' },
-      },
-      required: ['command'],
-    }),
-    execute: async (args) => {
-      const record: ToolCallRecord = {
-        id: uid(),
-        name: 'run_command',
-        input: args,
-        output: '',
-        status: 'running',
-        startedAt: Date.now(),
-        durationMs: 0,
-      }
-      segments.push({ kind: 'tool', call: record })
-      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-      try {
-        const res = await executeCommand(session.id, args as never)
-        record.output = res.content
-        record.status = res.isError ? 'error' : 'success'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return toolResultForModel(res, record)
-      } catch (err) {
-        record.output = `ERROR: ${(err as Error).message}`
-        record.status = 'error'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return { content: `Error: 命令执行失败（${(err as Error).message}）`, isError: true }
-      }
-    },
-  })
-
-  // 内置工具：remember（跨会话记忆，一键可插拔——与注入/指令段共用"记忆"勾选这一开关）
-  // 模型在对话中判断"用户明确表达的偏好/重要事实"时调用；注入到所有后续会话的 system prompt
-  if (shouldRegisterBuiltin(agent.builtinTools, 'remember')) tools['remember'] = tool({
-    description:
-      '把用户明确表达的、值得长期记住的信息（个人偏好、项目事实、长期约定等）存入跨会话记忆。' +
-      '之后所有会话都会自动参考这些记忆。仅在用户明确表达、且对未来对话有长期价值时使用，不要滥用（不要记住临时性内容）。',
-    inputSchema: jsonSchema({
-      type: 'object',
-      properties: {
-        content: { type: 'string', description: '要记住的内容（一句话，简洁完整，如"用户喜欢简洁的回答"）' },
-      },
-      required: ['content'],
-    }),
-    execute: async (args) => {
-      const content = String((args as { content?: unknown }).content ?? '').trim()
-      const record: ToolCallRecord = {
-        id: uid(),
-        name: 'remember',
-        input: args,
-        output: '',
-        status: 'running',
-        startedAt: Date.now(),
-        durationMs: 0,
-      }
-      segments.push({ kind: 'tool', call: record })
-      emit({ type: 'tool_call_start', sessionId: session.id, call: record })
-      try {
-        if (!content) {
-          record.output = 'ERROR: content required'
-          record.status = 'error'
-          record.durationMs = Date.now() - record.startedAt
-          executedToolCalls.push(record)
-          emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: 'Error: content 参数必填', isError: true }
-        }
-        const result = addMemory(agent.id, content, 'auto')
-        const verb = result.merged ? '已更新' : '已记住'
-        record.output = `${verb}：${result.memory.content}`
-        record.status = 'success'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return { content: `${verb}（将影响后续所有会话）：${result.memory.content}${result.merged ? '（内容与原记忆相似，已合并更新）' : ''}` }
-      } catch (err) {
-        record.output = `ERROR: ${(err as Error).message}`
-        record.status = 'error'
-        record.durationMs = Date.now() - record.startedAt
-        executedToolCalls.push(record)
-        emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return { content: `Error: 记忆保存失败（${(err as Error).message}）`, isError: true }
-      }
-    },
-  })
+    mcpTools,
+  )
 
   // ---- 模型请求（可重试）：system/history 每次尝试内重新组装 ----
   // 压缩会改写 session.summary 与 session.messages，因此组装必须放进尝试函数，
@@ -478,11 +179,6 @@ export async function runTurn(
   let step = 0
   let inputTokens = 0
   let outputTokens = 0
-  // 时间线分段：文本与工具按发生顺序交错（DSH 风格）
-  const segments: MessageSegment[] = []
-  // 实际执行的工具调用记录（execute 端收集：output/状态/耗时完整，与前端事件同源；
-  // AI SDK v7 的 step.toolCalls 不含 result，无法从中取输出）
-  const executedToolCalls: ToolCallRecord[] = []
   let modelError: Error | null = null
 
   // 一次完整模型请求（含流式收尾）。返回 'ok'（成功）/ 'overflow'（上下文溢出，可恢复）/ 'error'。

@@ -71,7 +71,7 @@
 
 **步骤**：
 
-1. 读 `abortRun`（约 L29-40）和 `killSessionProcesses`、`activeSubruns` 的用法。
+1. 读 `abortRun`（约 L45-56）和 `killSessionProcesses`、`activeSubruns` 的用法。
 2. 构造一个场景：agent 先派了一个 subagent（子任务在跑），然后主线程又跑了一个 `npm run dev` 之类的长命令，此时用户点停止。
 3. 追踪代码，回答：如果不做第 2、3 件事（只 abort 流），会发生什么？写出具体的后果。
 4. 动手验证：让 agent 跑长命令，点停止，去任务管理器确认 node 进程被清干净。

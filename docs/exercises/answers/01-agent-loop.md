@@ -9,13 +9,13 @@
 **答案**（以当前代码为准，行号取近似区间）：
 
 ```
-① 上下文压缩检查   L53-66   （shouldCompact + compactSession）
-② 用户消息落盘+附件 L68-86   （userMsg push + modelUserText 拼附件绝对路径）
-③ 装配工具         L89-407  （MCP 工具 + web_search/subagent/glob/run_command/remember）
-④ 拼 system prompt  L409-448（persona + 技能 + 摘要 + 记忆 + stepBudget）
-⑤ streamText 执行   L450-507（streamText + await result.steps 的懒执行）
-⑥ 收集结果         L509-530（文本/工具记录/token，工具记录在 execute 端收集）
-⑦ 落盘 + done      L548-563（finalMsg push + usage/done 事件）
+① 上下文压缩检查   L71-83   （shouldCompact + compactSession）
+② 用户消息落盘+附件 L85-103  （userMsg push + modelUserText 拼附件绝对路径）
+③ 装配工具         L104-123 （统一 toolRegistry：assembleTools(内置+MCP) 一行装配）
+④ 拼 system prompt  L125-183（persona + 技能 + 摘要 + 记忆 + AGENTS.md + 约束 + 记忆指令）
+⑤ streamText 执行   L185-246（attemptModel：组装 + streamText + await result.steps 的懒执行）
+⑥ 收集结果         L246-322（文本/工具记录/token，工具记录在 execute 端收集；三态收尾）
+⑦ 落盘 + done      L307-322（finalMsg push + usage/done 事件）
 ```
 
 **为什么**：压缩前置必须在用户消息落盘之前（否则新消息可能被压缩误伤）；工具装配要在 streamText 之前（否则模型没工具可调）；这 7 步的顺序不是随意的，每步都在为下一步准备输入。对应指南 01 的 §1、§4-§9。

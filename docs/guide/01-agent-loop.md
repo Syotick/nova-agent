@@ -58,7 +58,7 @@ flowchart LR
 
 ---
 
-## 2. 常量与全局表（L17-40）
+## 2. 常量与全局表（L17-56）
 
 ```ts
 const MAX_STEPS = Number(process.env.NOVA_AGENT_MAX_STEPS ?? 24)   // 每轮最多工具步数
@@ -72,8 +72,8 @@ const activeRuns = new Map<string, { abort: () => void }>()      // 会话 → a
 const activeSubruns = new Map<string, Set<() => void>>()         // 主会话 → 子任务 abort 集合
 ```
 
-**中断注册表**：`abortRun(sessionId)`（L29）是"用户点停止"的入口（由 `/api/chat/stop` 调用）。
-注意它做了三件事（L29-40）：
+**中断注册表**：`abortRun(sessionId)`（L45）是"用户点停止"的入口（由 `/api/chat/stop` 调用）。
+注意它做了三件事（L45-56）：
 1. abort 主回合的流式请求
 2. `killSessionProcesses`——**杀掉这个会话正在跑的命令进程树**（否则 npm run dev 中断后还占着端口）
 3. 连带 abort 所有子任务（防幽灵执行）
@@ -82,7 +82,7 @@ const activeSubruns = new Map<string, Set<() => void>>()         // 主会话 �
 
 ---
 
-## 3. runTurn 入口（L42-51）
+## 3. runTurn 入口（L58-68）
 
 ```ts
 export async function runTurn(
@@ -99,7 +99,7 @@ export async function runTurn(
 
 ---
 
-## 4. 第一步：上下文压缩前置（L53-66）
+## 4. 第一步：上下文压缩前置（L71-83）
 
 ```ts
 if (shouldCompact(session, agent.model)) {
@@ -115,7 +115,7 @@ if (shouldCompact(session, agent.model)) {
 压缩不是必耗时：`shouldCompact` 只在"消息太多 或 上下文占用超阈值"时才返回 true。
 压缩失败也不阻塞——保留原历史继续（catch 里只 warn）。
 
-## 5. 用户消息落盘 + 附件注入（L68-86）
+## 5. 用户消息落盘 + 附件注入（L85-103）
 
 ```ts
 session.messages.push(userMsg)   // 用户消息先进内存（后面由路由统一 saveSession 落 SQLite）
@@ -127,70 +127,74 @@ MCP 工具要求传绝对路径，模型照着路径就能 `read_file`。
 
 ---
 
-## 6. 核心之一：装配工具（L89-407）
+## 6. 核心之一：装配工具（L104-123）——统一工具注册表
 
-工具是"模型能调的胳膊"。这里把三类工具塞进一个 `tools` 字典：
+工具是"模型能调的胳膊"。**主循环只做一件事：拉 MCP 清单 → 调 `assembleTools` 一行装配**：
 
-### 6.1 MCP 工具（L89-125）——从服务器拉的
 ```ts
+// agentLoop.ts L111-123
 const mcpTools = await listToolsFor(agent.mcpServerIds)   // 当前 agent 勾选的 MCP 服务器
-for (const t of mcpTools) {
-  tools[t.name] = tool({ ... })   // 用 AI SDK 的 tool() 包装成模型可调用的 schema
-}
+const tools = assembleTools(agent, { session, agent, depth, emit, segments, ... }, mcpTools)
 ```
-MCP 服务器（filesystem / playwright…）是一个个独立子进程，它们的工具列表通过 `listToolsFor`
-聚合。这里**只做了包装**，真正的执行在 `callMcpTool(t.serverId, t.name, args, timeout)`。
-留意超时：`t.timeoutMs ?? 120000`——工具调用默认 120 秒，每类 MCP 配置可覆盖。
 
-### 6.2 内置工具——所有 agent 自动拥有（不用勾选）
-- **web_search**（L128-145）：走 `builtinTools` 数组（见 `server/builtinTools.ts`），搜索是做"查资料"最省步数的路子。
-- **subagent**（L150-259）：子 agent 编排。核心是**递归调用自己**：
-  ```ts
-  const msg = await runTurn(subSession, subAgent, task, () => {}, undefined, undefined, depth + 1)
-  ```
-  子任务 = 一个内存临时会话（不入库）+ 完整独立的一轮 loop，`push` 传空函数（子过程不推给前端，只把最终文本交回主 agent）。
-  有几个聪明的防护：
-  - 深度限制 `depth >= MAX_SUBAGENT_DEPTH`（L187）：防无限递归，成本随深度爆炸。
-  - **中断传播**（L208-211）：主 abort 时连带 abort 子任务。
-  - **失败策略**（L236-245）：子任务失败返回"原因 + 部分产出"，由主 agent 决策——不盲目重试、禁止编造结果。
-- **glob**（L263-305）：六大核心编程工具之一，文件名模式匹配（实现见 `server/glob.ts`，支持 `*` `**` `?`）。
-- **run_command**（L310-353）：终端执行（实现见 `server/terminal.ts`），是"改代码 → 跑构建/测试验证"的关键一环；命令进程参与会话级进程树管理，中断会清理。
-- **remember**（L357-407）：跨会话记忆，把算"值得长期记住"的一句话写进记忆库（`server/memory.ts`）。
+真正"有哪些工具、每个工具怎么执行"全在 **`server/toolRegistry.ts`**（统一工具注册表）：
+内置工具 + MCP 工具走**同一条装配管道**，只是实现来源不同。
 
-> 观察：MCP 工具和内置工具的 execute **结构完全一样**（record → push start → 执行 → push end → 返回），
-> 这是刻意的一致性，让前端渲染、记录收集走同一套逻辑。
+### 6.1 内置工具（toolRegistry.ts 的 builtinToolDefs）——进程内实现
+5 个内置工具集中声明：`run_command / glob / remember / subagent / web_search`。
+每个 = `{ id, name, description, inputSchema, createExecute(runtime) }`：
+- **元数据**（名字/描述/参数结构）在注册表集中管理，Agent 配置页按 `builtinTools` 勾选启用
+- **execute 通过 `runtime` 注入依赖**（session / emit / segments / toolResultForModel…），
+  不再直接碰主循环内部状态——想加一个内置工具 = 往 `builtinToolDefs` 加一个定义，主循环零改动
+- `subagent` 依赖递归（`runTurn`），通过 `runtime.runSubagent` 注入，避免注册表与主循环循环依赖
+- `web_search` 的实现（DeepSeek 原生 + curl 兜底链）仍留在 `server/builtinTools.ts`，
+  注册表只负责把它接进 record/事件/修剪管道
+
+### 6.2 MCP 工具（agentLoop 拉清单 + toolRegistry 包装）——协议接入
+MCP 服务器（filesystem / playwright…）是一个个独立子进程，工具清单通过 `listToolsFor`
+聚合。注册表用**同一套 record → emit start → 执行 → emit end → 修剪**管道包装它们，
+所以和内置工具结构完全一致（这是刻意的一致性，让前端渲染、记录收集走同一套逻辑）。
+真正的执行在 `callMcpTool(t.serverId, t.name, args, timeout)`——留意超时 `t.timeoutMs ?? 120000`。
+**命名冲突保护**：MCP 工具若与内置工具撞名，内置优先（不覆盖核心能力）。
+
+> 教学点：这就是"**工具可插拔、可分配**"的落点——内置工具加定义、MCP 加配置，主循环只留一行装配。
 
 ---
 
-## 7. 核心之二：拼 system prompt（L409-448）
+## 7. 核心之二：拼 system prompt（L125-183）
 
 ```ts
-const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${stepBudget}`
+const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}${memoryInstruction}`
 ```
 
-一段 system prompt = 五块拼起来：
+一段 system prompt = 六块拼起来：
 1. **persona**：agent 的人设（"你是...用中文回答..."）
 2. **技能**：`injectSkills(agent.skillIds)`——把勾选的技能正文注入（见 skills 篇）
 3. **历史摘要**：压缩产生的 `session.summary`（有才注入）
-4. **长期记忆**：`memoryBlock`（L416-431）——按用户输入做词面检索 Top-K + 最近记忆兜底；命中≥3 时不兜底避免噪声；注入后 `touchMemories` 保活（LRU 里提升生命周期）
-5. **执行约束**：`stepBudget`（L432-447）——**这段是"教模型做人"的**：
+4. **长期记忆**：`memoryBlock`（L143-144）——`buildMemoryBlock(agent.id, modelUserText, 5)`：按用户输入做词面检索 Top-K + 热度补齐；命中≥3 不补齐避免噪声；注入后 touch 保活（见记忆篇）。记忆没启用（Agent 配置页取消勾选）则为空串
+5. **项目说明**：`projectMemoryBlock`（L134-141）——工作区 `AGENTS.md`（+ `AGENTS.local.md`）项目宪法
+6. **执行约束 + 记忆指令**：`stepBudget`（L145-161）+ `memoryInstruction`（L162-184，记忆启用才拼）——**这段是"教模型做人"的**：
    - 最多 24 步，要高效规划
    - 必须给最终结论，禁止"请稍等"就结束
    - 工具失败分级处理（网络错误重试 1 次 / 空结果换关键词 / 换表述），**禁止反复重试同一工具**
    - 工具选择策略：查资讯用 web_search 不开浏览器；浏览器工具只在用户明确要求时用
    - 任务执行策略：读代码用 read/search、改代码用 edit/write、验证用 run_command
+   - 记忆指令（remember 怎么用）只在记忆启用时出现——与注入/工具共用同一开关
 
 **这段为什么重要**：模型没有"常识"，它不会自动知道"别一次搜索 8 遍"、"改完代码要自己跑测试验证"。这些经验全部要靠提示词显式写。这也是 prompt 工程最实际的应用。
 
 ---
 
-## 8. 组装历史 + 开跑（L450-507）
+## 8. 组装历史 + 开跑（L185-246）
 
 ```ts
 const history = session.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }))
 history.push({ role: 'user', content: modelUserText })
 ```
 历史去掉最后一条（刚 push 的用户消息，用带附件的 modelUserText 版本替换）给模型。
+
+组装（system/history）在 `attemptModel()`（L186）内完成——因为溢出恢复会先压缩、改写
+`session.summary` / `session.messages`，重试时必须拿到压缩后的新上下文。
 
 ```ts
 const result = await streamText({
@@ -206,19 +210,19 @@ const result = await streamText({
 })
 ```
 
-**AI SDK 的懒执行**很关键：`streamText` 返回一个查询对象，真正的请求发出 + 多步循环，在你 `await result.steps` 时才开始（L509-519）。模型 401 / 网络错误都是在这个 await 抛出来的——这里特意**不能吞掉错误**，否则前端只收到一条空消息、没有任何提示。
+**AI SDK 的懒执行**很关键：`streamText` 返回一个查询对象，真正的请求发出 + 多步循环，在你 `await result.steps` 时才开始（L247）。模型 401 / 网络错误都是在这个 await 抛出来的——这里特意**不能吞掉错误**，否则前端只收到一条空消息、没有任何提示。错误若被 `isContextWindowExceededError` 识别为"上下文溢出"，会走压缩 + 重试一次（见 06 篇）。
 
 ---
 
-## 9. 结果收集与三态收尾（L509-563）
+## 9. 结果收集与三态收尾（L246-322）
 
 工具调用记录**不从 steps 解析**——AI SDK v7 的 `step.toolCalls` 不含 result（执行输出）。
-所以采用**在 execute 端收集**：每个工具的 execute 里自己 push 到 `executedToolCalls`（与推给前端的事件同源）。这是本项目踩过坑后修出来的（详见各 execute 里的 `executedToolCalls.push`）。
+所以采用**在 execute 端收集**：每个工具的 execute 里自己 push 到 `executedToolCalls`（与推给前端的事件同源）。这是本项目踩过坑后修出来的（toolRegistry 里 `endRecord` 统一做）。
 
 收尾分三种情况：
-1. **模型错误**（L532）：发 `error` 事件，不落盘空消息。
-2. **中断且无输出**（L542）：不落盘、不发 done——因为中断的展示由前端负责，后端再落盘会重复。
-3. **正常结束**（L548）：组装 `finalMsg`（文本 + 工具记录 + token 用量 + 时间线 segments），push 进 messages，发 `usage` + `done` 事件。
+1. **模型错误**：发 `error` 事件，不落盘空消息。
+2. **中断且无输出**：不落盘、不发 done——因为中断的展示由前端负责，后端再落盘会重复。
+3. **正常结束**（L307）：组装 `finalMsg`（文本 + 工具记录 + token 用量 + 时间线 segments），push 进 messages，发 `usage` + `done` 事件。
 
 三种情况都要 `activeRuns.delete(session.id)` + `killSessionProcesses`——清理中断注册和命令进程，为下一轮腾干净。
 
@@ -264,15 +268,16 @@ return finalMessage
 
 ```
 agentLoop.ts（本篇：编排）
- ├── models.ts      → createModelForAgent / buildProviderOptions（模型与思考模式）
- ├── mcp.ts         → listToolsFor / callMcpTool（MCP 工具桥接）
- ├── builtinTools.ts→ web_search
- ├── skills.ts      → injectSkills（技能注入）
- ├── compact.ts     → shouldCompact / compactSession（压缩）
- ├── memory.ts      → searchMemories / addMemory / listMemories / touchMemories（记忆）
- ├── terminal.ts    → executeCommand / killSessionProcesses（run_command）
- ├── glob.ts        → executeGlob（glob）
- └── types.ts       → ChatEvent / Message / ToolCallRecord（共享类型）
+ ├── toolRegistry.ts → assembleTools / builtinToolDefs（统一工具注册表，内置+MCP 同管道）
+ ├── models.ts       → createModelForAgent / buildProviderOptions（模型与思考模式）
+ ├── mcp.ts          → listToolsFor / callMcpTool（MCP 工具桥接）
+ ├── builtinTools.ts → web_search 实现（DeepSeek 原生 + curl 兜底链）
+ ├── skills.ts       → injectSkills（技能注入）
+ ├── compact.ts      → shouldCompact / compactSession（压缩）
+ ├── memory.ts       → buildMemoryBlock / addMemory / loadProjectMemory（记忆）
+ ├── terminal.ts     → executeCommand / killSessionProcesses（run_command）
+ ├── glob.ts         → executeGlob（glob）
+ └── types.ts        → ChatEvent / Message / ToolCallRecord（共享类型）
 ```
 
 下一篇（02）建议：MCP 客户端 `server/mcp.ts`——"怎么把外部工具变成 agent 的手"。

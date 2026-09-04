@@ -195,7 +195,7 @@ return content.map(c => c.text).filter(Boolean).join('\n')
 
 ## 10. 对外的接口（L236-252）
 
-- `listToolsFor(mcpServerIds)` → agent 勾选了哪些 server，就把那些工具合并出来（agentLoop 用）
+- `listToolsFor(mcpServerIds)` → agent 勾选了哪些 server，就把那些工具合并出来（agentLoop 经 toolRegistry 的统一装配使用）
 - `getHealth()` → 供 `/api/health` 汇总
 - 加上 `callMcpTool` 和 `disconnectServer`/`reconnectServer`（管理页删除/重连用）
 
@@ -242,7 +242,8 @@ await server.connect(new StdioServerTransport())  // 从标准输入读请求、
 
 ```
 mcp.ts（本篇：MCP 客户端桥）
- ├── agentLoop.ts → listToolsFor / callMcpTool（把工具交给模型）
+ ├── agentLoop.ts → assembleTools（统一装配，见 01 篇）
+ ├── toolRegistry.ts → listToolsFor 拉清单 + callMcpTool 包装成模型工具（MCP 工具注册管道）
  ├── types.ts     → McpServerConfig / McpTool
  ├── workspace.ts → resolveMcpArgs（{{workspace}} 占位符 → 工作区路径）
  ├── routes/...   → 管理页 CRUD（save/delete/reconnect）
