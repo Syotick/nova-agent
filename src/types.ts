@@ -159,6 +159,8 @@ export interface Memory {
   content: string
   source: 'auto' | 'manual'
   createdAt: number
+  /** 上次被注入引用的时间（热度排序用；旧数据可能为 0/缺失） */
+  lastUsedAt?: number
 }
 
 export type ChatEvent =

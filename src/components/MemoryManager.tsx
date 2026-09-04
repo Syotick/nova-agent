@@ -24,6 +24,9 @@ export default function MemoryManager() {
 
   const currentAgent = agents.find((a) => a.id === currentAgentId)
 
+  // 按"上次使用时间"（热度）降序：最近常被注入引用的记忆排前面，保活机制可见
+  const sortedMemories = [...memories].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))
+
   const submit = async () => {
     if (!content.trim()) return
     setSaving(true)
@@ -63,7 +66,7 @@ export default function MemoryManager() {
         <div className="flex flex-col gap-1 leading-tight">
           <span className="text-sm font-semibold">跨会话记忆</span>
           <span className="text-[11px] leading-relaxed text-muted-foreground">
-            记住用户偏好与项目事实，之后所有会话自动参考（每轮按问题检索 Top 5 注入）。
+            记住用户偏好与项目事实，之后所有会话自动参考（每轮按"相关度 + 最近使用热度"排序注入 Top 5）。
             当前记忆库属于 Agent「{currentAgent?.name ?? '未选择'}」；对话中模型可通过 remember 工具自动写入，也可以手动添加。
           </span>
         </div>
@@ -101,7 +104,7 @@ export default function MemoryManager() {
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{memories.length} 条</span>
         </div>
         <div className="flex flex-col gap-2">
-          {memories.map((m) => (
+          {sortedMemories.map((m) => (
             <div key={m.id} className="flex items-start gap-2.5 rounded-2xl border border-border bg-card/50 px-4 py-3">
               <Brain className="mt-0.5 h-4 w-4 flex-none text-primary/70" />
               <div className="flex min-w-0 flex-1 flex-col gap-1 leading-tight">
@@ -136,6 +139,7 @@ export default function MemoryManager() {
                     {m.source === 'auto' ? '模型自动记录' : '手动添加'}
                   </span>
                   <span>{fmtTime(m.createdAt)}</span>
+                  <span className="text-muted-foreground/80">上次使用 {m.lastUsedAt ? fmtTime(m.lastUsedAt) : '从未'}</span>
                 </span>
               </div>
               <span className="flex gap-0.5">
@@ -156,7 +160,7 @@ export default function MemoryManager() {
               </span>
             </div>
           ))}
-          {!memories.length && (
+          {!sortedMemories.length && (
             <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
               还没有记忆。试试在对话中说「记住我喜欢简洁的回答」，或用上方表单手动添加一条。
             </div>

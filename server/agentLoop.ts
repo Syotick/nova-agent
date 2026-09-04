@@ -10,7 +10,7 @@ import { shouldCompact, compactSession, maybePruneToolOutput, isContextWindowExc
 import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools, shouldRegisterBuiltin } from './builtinTools.js'
 import { newId } from './store.js'
-import { searchMemories, addMemory, listMemories, touchMemories, loadProjectMemory } from './memory.js'
+import { searchMemories, addMemory, recentMemories, touchMemories, loadProjectMemory } from './memory.js'
 import { executeCommand, killSessionProcesses } from './terminal.js'
 import { executeGlob } from './glob.js'
 
@@ -435,14 +435,14 @@ export async function runTurn(
     ? `\n\n---\n\n# 项目说明（来自工作区的 AGENTS.md，遵守之）\n${projectMemory}`
     : ''
 
-  // 跨会话记忆：词面检索 Top-K + 最近记忆补齐（"我有什么偏好"这类无共同词的提问
+  // 跨会话记忆：词面检索 Top-K + 最近使用（热度）补齐（"我有什么偏好"这类无共同词的提问
   // 靠 recency 兜底，但命中 ≥3 时不补齐以降低噪声）；注入后 touch（LRU 保活）
   const memoryBlock = (() => {
     try {
       const hits = searchMemories(agent.id, modelUserText, 5)
-      // 词面命中 ≥ 3 时不再 recency 补齐（避免无关记忆进 prompt）
+      // 词面命中 ≥ 3 时不再热度补齐（避免无关记忆进 prompt）
       const recents = hits.length < 3
-        ? listMemories(agent.id).slice(0, Math.max(0, 5 - hits.length))
+        ? recentMemories(agent.id, Math.max(0, 5 - hits.length))
         : []
       const all = [...hits, ...recents.filter((r) => !hits.some((h) => h.id === r.id))]
       if (!all.length) return ''

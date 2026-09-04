@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { db } from '../db.js'
 import {
   addMemory, deleteMemory, listMemories, searchMemories, updateMemory, consolidateMemories,
-  similarity, loadProjectMemory, MEMORY_LIMIT, MEMORY_MAX_LENGTH,
+  similarity, loadProjectMemory, MEMORY_LIMIT, MEMORY_MAX_LENGTH, recencyFactor, recentMemories,
 } from '../memory.js'
 
 // 用独立 agentId 隔离测试数据（memories 外键引用 agents，需先建测试 agent）
@@ -116,6 +116,64 @@ describe('memory 检索', () => {
     addMemory(TEST_AGENT, '测试内容', 'manual')
     expect(searchMemories(TEST_AGENT, '')).toHaveLength(0)
     expect(searchMemories(TEST_AGENT, 'a b c')).toHaveLength(0)
+  })
+})
+
+describe('memory 热度（recencyFactor）', () => {
+  const DAY = 86_400_000
+  const now = Date.now()
+  it('越近越高：刚用=1，30 天≈0.67，超 90 天=0', () => {
+    expect(recencyFactor(now, now)).toBe(1)
+    expect(recencyFactor(now - 30 * DAY, now)).toBeCloseTo(1 - 30 / 90, 5)
+    expect(recencyFactor(now - 90 * DAY, now)).toBe(0)
+    expect(recencyFactor(now - 180 * DAY, now)).toBe(0)
+  })
+  it('lastUsedAt<=0（旧数据未记录）按 0 处理', () => {
+    expect(recencyFactor(0, now)).toBe(0)
+    expect(recencyFactor(-1, now)).toBe(0)
+  })
+})
+
+describe('memory 综合分排序（覆盖率 + 热度）', () => {
+  it('覆盖率：同样命中，短记忆（覆盖比例高）排前', () => {
+    addMemory(TEST_AGENT, '简洁回答', 'manual') // 命中"简洁"覆盖 2/4
+    addMemory(TEST_AGENT, '简洁这个词出现在一条很长的记忆里其余部分与当前问题毫无关系', 'auto') // 覆盖比例低
+    const hits = searchMemories(TEST_AGENT, '简洁', 5)
+    expect(hits[0].content).toBe('简洁回答')
+  })
+
+  it('热度：词面命中相当，最近使用的排前（直接插库绕过合并）', () => {
+    const now = Date.now()
+    const ins = db.prepare(
+      'INSERT INTO memories (id, agent_id, content, source, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    ins.run('mem_hot_new', TEST_AGENT, '项目用甲框架', 'auto', now, now)              // 刚用过
+    ins.run('mem_hot_old', TEST_AGENT, '项目用乙框架', 'auto', now, now - 200 * 86_400_000) // 很久没用
+    const hits = searchMemories(TEST_AGENT, '项目', 5)
+    expect(hits[0].content).toContain('甲框架')
+  })
+
+  it('完全不相关的记忆不会因热度被带进来（先词面过滤再打分）', () => {
+    addMemory(TEST_AGENT, '用户喜欢咖啡', 'manual')
+    addMemory(TEST_AGENT, '项目使用数据库', 'auto')
+    // 查询只命中"咖啡"那条；"数据库"那条即使最近用过也不出现
+    const hits = searchMemories(TEST_AGENT, '咖啡', 5)
+    expect(hits.every((m) => m.content.includes('咖啡'))).toBe(true)
+    expect(hits.length).toBeLessThan(2)
+  })
+})
+
+describe('memory 最近使用列表（recentMemories）', () => {
+  it('按 last_used_at 降序返回（注入的热度补齐来源）', () => {
+    const now = Date.now()
+    const ins = db.prepare(
+      'INSERT INTO memories (id, agent_id, content, source, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    ins.run('mem_rec_a', TEST_AGENT, '甲记忆', 'manual', now, now)
+    ins.run('mem_rec_b', TEST_AGENT, '乙记忆', 'manual', now, now - 10 * 86_400_000)
+    ins.run('mem_rec_c', TEST_AGENT, '丙记忆', 'manual', now, now - 50 * 86_400_000)
+    const recents = recentMemories(TEST_AGENT, 3)
+    expect(recents.map((m) => m.content)).toEqual(['甲记忆', '乙记忆', '丙记忆'])
   })
 })
 

@@ -211,7 +211,20 @@ function bigramsOf(s: string): Set<string> {
   return bigrams(s)
 }
 
-// 检索：用户消息按标点/空白切出片段，统计每个记忆的命中数排序取 Top-K
+// 时间衰减（热度）：距上次使用越近，分越高；90 天线性衰减 1→0。
+// 简单可解释：最近常被引用的记忆，更可能是"当前仍然相关"的——不引向量库也能给排序加时间维度。
+// lastUsedAt<=0（旧数据未记录）按 0 处理。
+export function recencyFactor(lastUsedAt: number, now = Date.now()): number {
+  if (!(lastUsedAt > 0)) return 0
+  const days = Math.max(0, (now - lastUsedAt) / 86_400_000)
+  return Math.max(0, 1 - days / 90)
+}
+
+// 检索：用户消息按标点/空白切出片段，对每条命中记忆算"综合分"排序取 Top-K。
+// 综合分 = 词面覆盖率(0.7) + 热度/时间衰减(0.3)：
+//   覆盖率 = 命中片段覆盖该记忆内容的比例（长记忆必须被覆盖得多才得高分，防"命中一词虚高"）；
+//   热度    = recencyFactor(last_used_at)（相关记忆里优先最近常用的）。
+// 完全不相关的记忆（无词面命中）进不来（hits>0 才计分）——热度只影响"已相关"的记忆排序，不把无关记忆带进 prompt。
 export function searchMemories(agentId: string, query: string, limit = 5): Memory[] {
   const fragments = query
     .split(/[\s,，。.;；:：!！?？"'“”‘’()（）\[\]【】<>《》、|/\\-]+/)
@@ -222,25 +235,49 @@ export function searchMemories(agentId: string, query: string, limit = 5): Memor
   const rows = db.prepare(
     'SELECT * FROM memories WHERE agent_id = ?',
   ).all(agentId) as Record<string, unknown>[]
+  const now = Date.now()
 
-  const scored: Array<{ memory: Memory; hits: number; exact: boolean }> = []
+  const scored: Array<{ memory: Memory; score: number; hits: number; exact: boolean }> = []
   for (const row of rows) {
     const content = String(row.content)
     let hits = 0
     let exact = false
+    let covered = 0 // 命中片段覆盖的字符数（估）
     for (const f of fragments) {
       if (f.length > 8) {
         // 长片段（中文整句无空格）：2-gram 与记忆内容交叉命中计数
+        let gramHits = 0
         for (const g of bigramsOf(f)) {
-          if (content.includes(g)) { hits++; exact = true }
+          if (content.includes(g)) gramHits++
+        }
+        if (gramHits > 0) {
+          hits += gramHits
+          exact = true
+          // 2-gram 命中折算覆盖字符（每个 gram 约 2 字，上限为片段长度），不重复超内容长度
+          covered += Math.min(f.length, gramHits * 2)
         }
       } else if (content.includes(f)) {
         hits++
         exact = true
+        covered += f.length
       }
     }
-    if (hits > 0) scored.push({ memory: rowToMemory(row), hits, exact })
+    if (hits > 0) {
+      const coverage = Math.min(1, covered / Math.max(1, content.length))
+      const heat = recencyFactor(Number(row.last_used_at ?? 0), now)
+      scored.push({ memory: rowToMemory(row), score: coverage * 0.7 + heat * 0.3, hits, exact })
+    }
   }
-  scored.sort((a, b) => b.hits - a.hits || Number(b.exact) - Number(a.exact))
+  scored.sort((a, b) => b.score - a.score || b.hits - a.hits || Number(b.exact) - Number(a.exact))
   return scored.slice(0, limit).map((s) => s.memory)
+}
+
+// 最近使用的记忆（按 last_used_at 降序）——注入的"热度补齐"来源。
+// 与 searchMemories 不同：它不带词面过滤，用于"命中太少时补足"——补进最近常被引用的记忆，
+// 而不是纯按创建时间的最新（后者可能塞进一条从没被用过的旧偏好）。
+export function recentMemories(agentId: string, limit = 5): Memory[] {
+  const rows = db.prepare(
+    'SELECT * FROM memories WHERE agent_id = ? ORDER BY last_used_at DESC, created_at DESC LIMIT ?',
+  ).all(agentId, limit) as Record<string, unknown>[]
+  return rows.map(rowToMemory)
 }

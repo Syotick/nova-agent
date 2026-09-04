@@ -132,7 +132,7 @@ export function addMemory(agentId, content, source = 'manual') {
 
 ---
 
-## 6. 读取：相关度检索 + 注入（L154-186）
+## 6. 读取：相关度 × 热度 综合排序 + 注入（L207-280）
 
 ```ts
 export function searchMemories(agentId, query, limit = 5): Memory[] {
@@ -140,16 +140,23 @@ export function searchMemories(agentId, query, limit = 5): Memory[] {
   // ② 每个片段去每条记忆里数"命中几次"
   //    短片段（≤8字）：直接 content.includes(f)
   //    长片段（中文整句没空格）：拆成 2-gram，跟记忆内容交叉计数
-  //    命中即标记 exact
-  // ③ 按命中数排序（同命中数时 exact 优先）→ 取 Top-5
+  // ③ 命中才计分（hits > 0），综合分 = 覆盖率 × 0.7 + 热度 × 0.3
+  //    覆盖率 = 命中片段覆盖该记忆内容的比例（防"长记忆命中一个词就虚高"）
+  //    热度    = recencyFactor(last_used_at)（90 天线性衰减）
+  // ④ 按综合分排序 → 取 Top-5
 }
 ```
 
 **为什么要切片段再数命中**：用户一句"我上次让你记住的简洁回答叫什么来着"里，只有"简洁"和"回答"是线索。整体匹配会全军覆没，切碎了反而能命中。这正是穷人的中文"分词"——**不靠分词器，靠切分 + 2-gram 交叉**。
 
+**为什么排序要"覆盖率 + 热度"而不是只数命中次数**：
+- **覆盖率**解决"公平"：一条 10 字的短记忆命中"简洁"，和一条 200 字的长记忆命中"简洁"，都算 1 次命中显然不公平——长记忆的"简洁"占比低、更可能是顺带一提。按"命中片段覆盖内容的比例"打分，短小精悍的记忆更容易浮上来。
+- **热度**解决"时效"：`recencyFactor` 用 `last_used_at` 做 90 天线性衰减（越近越高）。同样是相关的记忆，**最近常被引用的**更可能是用户还在乎的。
+- 两者相加 `0.7 / 0.3` 是"相关为主、热度为辅"——而且**先词面过滤再打分**（hits>0 才计分），热度永远不能把一条无关记忆带进 prompt（防噪声）。
+
 注入后在 agentLoop 里还有一个收尾（见 01 篇 memoryBlock）：
-- 命中不足 3 条时，用**最近记忆**补齐到 5 条（"我有什么偏好"这种无共同词的问题，靠 recency 兜底）
-- 注入完 `touchMemories` 给命中条刷新 last_used_at 保活
+- 命中不足 3 条时，用 `recentMemories`（**最近使用**，last_used_at 降序）补齐到 5 条——"我有什么偏好"这种无共同词的问题，靠**热度**兜底（而不是纯按创建时间，后者可能塞进一条从没被用过的旧偏好）
+- 注入完 `touchMemories` 给命中条刷新 last_used_at 保活（热度 + LRU 共用这一个时间戳）
 
 ---
 
@@ -208,7 +215,7 @@ export function consolidateMemories(agentId): number {
 
 ## 7. 名词复盘 + 动手建议
 
-**一句话记牢**：记忆 = 写(去重合并+LRU) + 读(切片段数命中 Top-K) + 保活(touch)；量小就用子串匹配，不上向量库。
+**一句话记牢**：记忆 = 写(去重合并+LRU) + 读(切片段数命中，覆盖率×0.7+热度×0.3 综合排序) + 保活(touch)；量小就用子串匹配，不上向量库。
 
 动手做：
 1. **记一条**：让 agent 记住"用户喜欢表格化输出"，去记忆管理页看到它；再换种说法让它"更新"同一条——看 `merged` 生效（详情里"已更新"字样）。
@@ -217,6 +224,7 @@ export function consolidateMemories(agentId): number {
 4. **读代码找设计**：在 `addMemory` 里临时把 `similarity` 改成返回 0，重启后重复保存——你会看到"没有去重合并会怎样"，就知道它为什么重要。
 5. **写 AGENTS.md 试"项目宪法"**：工作区放个 `AGENTS.md` 约定一句话，随便聊一句，看 agent 遵守——这就是"文件即记忆"（§6.5）。
 6. **攒近似条目看归并**：手动画两条近似记忆（或用脚本），触发一次 `consolidateMemories`（或等新增后节流触发），观察重复条目被清。
+7. **看热度排序**：记两条关键词相同的记忆，多用其中一条几次（让它被注入、touch 保活），去记忆管理页——那条排到前面、显示"上次使用"更新；同时设 `recencyFactor` 的 90 天窗口想象一条久未使用的记忆沉底。
 
 ---
 
@@ -226,19 +234,21 @@ export function consolidateMemories(agentId): number {
 - [ ] 能解释为什么这里刻意不用向量库 / FTS：量小 + 中文分词坑 + 可解释 + 零依赖
 - [ ] 能区分记忆表（模型自己攒的个性化事实）与 AGENTS.md（人和团队写的项目约定）的分工
 - [ ] 能说出"短侧覆盖率"比经典 Jaccard 好在哪（判断"A 是不是 B 的补充/改写"）
-- [ ] 动手：让 agent 记住一条偏好，换种说法再让它"更新"同一条，看 `merged` 生效
+- [ ] 能解释检索综合分"覆盖率 × 0.7 + 热度 × 0.3"：覆盖率解决"长记忆命中一词虚高"的公平，热度解决"最近常用"的时效，且先词面过滤再打分（热度不会把无关记忆带进来）
+- [ ] 能说出注入补齐从"最近创建"换成"最近使用"（recentMemories）的动机：无共同词提问时，该补的是"用户常提的"，不是"刚写的"
+- [ ] 动手：让 agent 记住一条偏好，换种说法再让它"更新"同一条，看 `merged` 生效；多用其中一条几次看它在管理页浮到前面
 
-> 卡住了？回头读对应小节；做完这 5 条再进 [练习册 05](../exercises/05-memory.md)。
+> 卡住了？回头读对应小节；做完这 7 条再进 [练习册 05](../exercises/05-memory.md)。
 
 
 ## 附：关联地图
 
 ```
 memory.ts（本篇：跨会话记忆）
- ├── agentLoop.ts → addMemory(remember工具) / searchMemories+listMemories（注入） / touchMemories（保活）
+ ├── agentLoop.ts → addMemory(remember工具) / searchMemories+recentMemories（注入） / touchMemories（保活）
  ├── db.ts        → SQLite memories 表
  ├── store.ts     → newId（记忆 id）
- └── 记忆管理页    → list / update / delete（UI 人工维护）
+ └── 记忆管理页    → list / update / delete + 热度排序展示（UI 人工维护）
 ```
 
 下一篇（06）建议：`server/compact.ts` —— 上下文压缩：token 感知 + 双兜底，长对话不爆。
