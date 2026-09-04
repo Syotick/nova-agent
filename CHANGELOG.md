@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0](https://github.com/Syotick/nova-agent/compare/nova-agent-v0.4.0...nova-agent-v0.5.0) (2026-09-04)
+
+
+### ✨ 新功能
+
+* **memory:** 记忆一键可插拔——一个开关管住工具+注入+指令段，构建逻辑收进 buildMemoryBlock 解耦 ([2d543ac](https://github.com/Syotick/nova-agent/commit/2d543acef1e9af7660d55f24b79c78c5b038b907))
+* **memory:** 记忆检索升级——相关度×热度综合排序 + 热度补齐 + 管理页热度展示（无入侵增强） ([dbbf2e0](https://github.com/Syotick/nova-agent/commit/dbbf2e0ffa67a76562ee6f9652f7bb8badb6c6f2))
+* **skills:** 技能按需加载——目录进 system + load_skill 工具取全文（对齐 DSH/Agent Skills） ([e14c68f](https://github.com/Syotick/nova-agent/commit/e14c68f87795a1a6b1a5712425fded654ec50996))
+* **tools:** 统一工具注册表 ToolRegistry——内置+MCP 同管道装配，主循环只留一行 ([cff7bc2](https://github.com/Syotick/nova-agent/commit/cff7bc294150c95dc598569d5bee65eb3623cc67))
+
 ## [0.4.0](https://github.com/Syotick/nova-agent/compare/nova-agent-v0.3.0...nova-agent-v0.4.0) (2026-09-04)
 
 
