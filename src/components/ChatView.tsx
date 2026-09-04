@@ -37,6 +37,7 @@ export default function ChatView() {
                   <>
                     <span className="flex-none font-semibold text-primary">
                       已压缩{currentSession.lastCompactRemoved ? ` ${currentSession.lastCompactRemoved} 条` : ''}
+                      {currentSession.lastCompactTrigger === 'overflow' && <span className="ml-1.5 font-normal text-muted-foreground">（溢出自动恢复）</span>}
                     </span>
                     <span className="min-w-0 flex-1 truncate" title={currentSession.summary}>{currentSession.summary}</span>
                   </>

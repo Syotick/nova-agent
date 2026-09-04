@@ -78,13 +78,20 @@ export default function ToolCallCard({ call }: { call: ToolCallRecord }) {
         </div>
         <pre className="max-h-[180px] overflow-auto rounded-lg bg-background/60 p-2 font-mono text-[11px] leading-relaxed">{fmtInput(call.input)}</pre>
 
-        <button
-          className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-          onClick={() => setShowOutput(!showOutput)}
-        >
-          <ChevronDown className={cn('h-3 w-3 transition-transform', showOutput && 'rotate-180')} />
-          输出结果（{(call.output || '').length} 字符）
-        </button>
+        <div className="mt-2.5 flex items-center gap-2">
+          <button
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+            onClick={() => setShowOutput(!showOutput)}
+          >
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showOutput && 'rotate-180')} />
+            输出结果（{(call.output || '').length} 字符）
+          </button>
+          {call.modelPruned && (
+            <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] text-warning" title="输出过大，喂给模型的版本已修剪（此处仍显示完整输出）">
+              模型侧已修剪
+            </span>
+          )}
+        </div>
         {showOutput && (
           <pre className="mt-1.5 max-h-[240px] overflow-auto rounded-lg bg-background/60 p-2 font-mono text-[11px] leading-relaxed">
             {call.output || '(空)'}

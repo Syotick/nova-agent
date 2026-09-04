@@ -7,6 +7,8 @@
 - 能解释"真实计数优先 + 条数兜底"的双触发
 - 能说清为什么摘要放独立字段而不是消息列表
 - 能读懂压缩提示词"保留什么、省略什么"
+- 能讲出"保留条数 + token 预算"双约束的设计意图
+- 能说清"工具结果修剪"与"溢出自动恢复"两条兜底链路
 
 ---
 
@@ -66,13 +68,61 @@
 
 **步骤**：
 
-1. 读 `compactSession`（约 L111-125）与 agentLoop 里 `summaryBlock` 的拼装。
+1. 读 `compactSession` 与 agentLoop 里 `summaryBlock` 的拼装。
 2. 推理：如果把摘要当普通消息 push 进 `session.messages`，会发生什么？（从"再计数/再压缩"角度）
 3. 说出"独立字段"的两个好处。
 
 **预期结果（自检）**：能说出——若进消息列表：① 摘要会被下一轮压缩当成"要总结的旧消息"之一，越滚越大；② 它参与 contextUsage 计数，污染占用判断。独立字段的好处：每轮固定拼进 prompt、干净可控、不被再压缩。
 
 **提示**：想想"摘要"本身也是文本，也有 token 成本；放哪决定了它会不会被再次压缩。
+
+---
+
+### 练习 5：读代码——保留条数 + token 预算（进阶）
+
+**目标**：理解"固定 20 条"的局限，以及 `computeKeepFrom` 怎么兜底。
+
+**步骤**：
+
+1. 读 `computeKeepFrom` 与 `compactSession`。
+2. 构造场景：同样保留 20 条，① 20 条超长消息 ② 20 条超短消息——哪个对小窗口模型危险？为什么"固定条数"不公平？
+3. 回答：`COMPACT_RETAIN_PCT` 默认 16 是什么意思？预算不够时保留条数会被裁到多少下限（`COMPACT_MIN_KEEP`）？
+
+**预期结果（自检）**：能说出"保留部分估算 token ≤ 窗口 × 16%；超预算把最旧保留消息并入压缩范围，但至少留 5 条"；并解释固定条数对超长消息不公平（20 条 × 5000 token = 10 万 token）。
+
+**提示**：`estimateTokens` 在 compact.ts 里；它是"免费但不太准"的估算，够用来做预算。
+
+---
+
+### 练习 6：读代码——溢出自动恢复（挑战）
+
+**目标**：理解"模型报溢出 → 压缩 → 重试一次"的完整链路。
+
+**步骤**：
+
+1. 读 agentLoop 的 `attemptModel` 与 `isContextWindowExceededError`。
+2. 回答：为什么 system/history 的组装必须在 `attemptModel` 内部，而不能在函数外拼好一次？
+3. 回答：溢出恢复时 `compactSession` 传了哪两个选项？为什么"压不动就不重试"？
+
+**预期结果（自检）**：能说出"压缩会改写 session.summary 与 session.messages，重试要拿到新上下文，所以组装必须进尝试函数"；溢出用 `{ force: true, keep: 6 }`；压不动就重试等于白跑一遍工具（可能重复副作用），所以直接透出原错误。
+
+**提示**：`isContextWindowExceededError` 为什么沿 `err.cause` 查？很多 provider 错误被 `fetch failed` 之类包装，真身在 cause 里。
+
+---
+
+### 练习 7：动手——修剪 + 溢出（进阶）
+
+**目标**：亲眼看到"上下文治理"生效。
+
+**步骤**：
+
+1. 设 `NOVA_AGENT_PRUNE_THRESHOLD=500`，让 Agent 跑一次输出很长的命令（如 `npm run build`），展开工具卡——看到"模型侧已修剪"徽章；对比完整输出（`call.output`）与模型看到的修剪版（head + `[... tool result middle pruned ...]` + tail）。
+2. 读 `maybePruneToolOutput`，回答：为什么用 `Array.from(text)` 而不是 `text.length`？
+3. 溢出实验（可选，需小窗口模型）：故意制造超长对话触发 `context window exceeded`，观察横幅出现"溢出自动恢复"且本轮未直接失败。
+
+**预期结果（自检）**：能说出"按 Unicode 码点切，`'😀'.length===2` 会把 emoji 从中间劈开，`Array.from` 不会"；溢出横幅带"溢出自动恢复"标记。
+
+**提示**：修剪只影响"喂给模型的 content"，`record.output` 始终是完整原文——这是"展示不丢、上下文受控"的关键设计。
 
 ---
 

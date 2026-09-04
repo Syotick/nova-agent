@@ -6,7 +6,7 @@ import { getWorkspacePath } from './workspace.js'
 import type { ChatEvent, Agent, Message, Session, ToolCallRecord, Attachment, ReasoningOption, MessageSegment } from './types.js'
 import { listToolsFor, callMcpTool } from './mcp.js'
 import { injectSkills } from './skills.js'
-import { shouldCompact, compactSession } from './compact.js'
+import { shouldCompact, compactSession, maybePruneToolOutput, isContextWindowExceededError } from './compact.js'
 import { createModelForAgent, resolveModel } from './models.js'
 import { builtinTools, shouldRegisterBuiltin } from './builtinTools.js'
 import { newId } from './store.js'
@@ -20,6 +20,23 @@ const MAX_STEPS = Number(process.env.NOVA_AGENT_MAX_STEPS ?? 24)
 
 // 子 Agent 嵌套深度上限：主(0) → 子(1) → 孙(2) → 曾孙(3)，最多 3 层
 const MAX_SUBAGENT_DEPTH = Number(process.env.NOVA_AGENT_MAX_SUBAGENT_DEPTH ?? 3)
+
+// 上下文溢出恢复时"保留更少"的条数（正常压缩默认 COMPACT_KEEP；溢出时保底这点条数，尽快腾出空间）
+const OVERFLOW_COMPACT_KEEP = 6
+
+// 工具结果"喂给模型"前的统一出口：超长输出修剪为 head + 标记 + tail（借鉴 DSH 的
+// tool-result pruner）。完整输出保留在 record.output 供前端展示/轨迹回放；
+// 修剪过则打 modelPruned 标记。错误信息很短，不修剪。
+function toolResultForModel(
+  res: { content: string; isError?: boolean },
+  record?: ToolCallRecord,
+): { content: string; isError?: boolean } {
+  if (res.isError) return res
+  const pruned = maybePruneToolOutput(res.content)
+  if (pruned === res.content) return res
+  if (record) record.modelPruned = true
+  return { ...res, content: pruned }
+}
 
 // 中断注册表：sessionId -> abort
 const activeRuns = new Map<string, { abort: () => void }>()
@@ -111,7 +128,7 @@ export async function runTurn(
           record.durationMs = Date.now() - record.startedAt
           executedToolCalls.push(record)
           emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-          return { content: out }
+          return toolResultForModel({ content: out }, record)
         } catch (err) {
           record.output = `ERROR: ${(err as Error).message}`
           record.status = 'error'
@@ -130,8 +147,10 @@ export async function runTurn(
       description: bt.description,
       inputSchema: jsonSchema(bt.inputSchema),
       execute: async (args) => {
-        return bt.execute(args as Record<string, unknown>, {
+        let current: ToolCallRecord | null = null
+        const res = await bt.execute(args as Record<string, unknown>, {
           onStart: (record) => {
+            current = record
             segments.push({ kind: 'tool', call: record })
             emit({ type: 'tool_call_start', sessionId: session.id, call: record })
           },
@@ -140,6 +159,7 @@ export async function runTurn(
             emit({ type: 'tool_call_end', sessionId: session.id, call: record })
           },
         })
+        return toolResultForModel(res, current ?? undefined)
       },
     })
   }
@@ -222,7 +242,7 @@ export async function runTurn(
             record.durationMs = Date.now() - record.startedAt
             executedToolCalls.push(record)
             emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-            return { content: msg.content }
+            return toolResultForModel({ content: msg.content }, record)
           }
           // 子任务未产出内容（中断等）：附上部分产出，让主 Agent 判断
           const partial = partialOf()
@@ -292,7 +312,7 @@ export async function runTurn(
         record.durationMs = Date.now() - record.startedAt
         executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return res
+        return toolResultForModel(res, record)
       } catch (err) {
         record.output = `ERROR: ${(err as Error).message}`
         record.status = 'error'
@@ -340,7 +360,7 @@ export async function runTurn(
         record.durationMs = Date.now() - record.startedAt
         executedToolCalls.push(record)
         emit({ type: 'tool_call_end', sessionId: session.id, call: record })
-        return res
+        return toolResultForModel(res, record)
       } catch (err) {
         record.output = `ERROR: ${(err as Error).message}`
         record.status = 'error'
@@ -406,14 +426,13 @@ export async function runTurn(
     },
   })
 
-  // system prompt = persona + 技能注入 + 历史摘要（压缩后存在）+ 执行约束 + 工具选择策略
+  // ---- 模型请求（可重试）：system/history 每次尝试内重新组装 ----
+  // 压缩会改写 session.summary 与 session.messages，因此组装必须放进尝试函数，
+  // 溢出恢复（先压缩再重试）时才能拿到压缩后的上下文。
   // 项目记忆（AGENTS.md：项目共享约定 + AGENTS.local.md 个人私有，见 memory.ts）
   const projectMemory = loadProjectMemory()
   const projectMemoryBlock = projectMemory
     ? `\n\n---\n\n# 项目说明（来自工作区的 AGENTS.md，遵守之）\n${projectMemory}`
-    : ''
-  const summaryBlock = session.summary
-    ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
     : ''
 
   // 跨会话记忆：词面检索 Top-K + 最近记忆补齐（"我有什么偏好"这类无共同词的提问
@@ -434,7 +453,12 @@ export async function runTurn(
       return ''
     }
   })()
-  const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。\n\n# 工具选择策略（重要）\n- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。\n- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。\n- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。
+  const stepBudget = `\n\n---\n\n# 执行约束\n- 本轮最多执行 ${MAX_STEPS} 次工具调用。请高效规划：能一次做完的不要分多步。\n- 必须给出最终结论：完成任务后用 1-3 句话向用户总结结果（不要说"请稍等"就结束）。\n- 若接近步骤上限仍未完成，先输出已获得的部分结果，并说明剩余部分未完成的原因。\n- 工具失败时按类型分级处理，不要一刀切：网络错误（ERROR）用同参数重试 1 次；空结果换更具体的关键词（最多 2 次）；结果不相关换表述（最多 1 次）。仍失败立即停止并给替代建议，禁止反复重试同一工具。
+
+# 工具选择策略（重要）
+- 查资讯、找资料、搜索网页：一律使用 web_search 工具，不要打开浏览器。
+- 浏览器工具（browser_*）只在用户明确要求"打开浏览器/打开网页/在浏览器里操作"时才使用；其他情况禁用。
+- web_search 一次可获取多条结果，通常 1-2 次搜索足够；先搜索，再基于结果回答，避免反复搜索。
 
 # 任务执行与项目操作（run_command）
 - 工作区就是你的项目目录：读代码用 filesystem 的 read/search 工具，改代码用 edit/write 工具，验证改动用 run_command 执行构建/测试（npm run build / npm test / node 脚本等）。
@@ -450,14 +474,14 @@ export async function runTurn(
 - 用户明确表达个人偏好、项目事实或长期约定时，调用 remember 工具记住（一句话，简洁完整）。
 - 不要记住临时性内容（本次任务细节、一次性指令）；每轮最多调用 1-2 次。
 - 回答时优先参考 system prompt 中注入的长期记忆；与当前对话冲突时以当前对话为准。`
-  const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}`
 
-  // 历史消息（AI SDK 格式）
-  const history = session.messages.slice(0, -1).map((m) => ({
-    role: m.role,
-    content: m.content,
-  }))
-  history.push({ role: 'user', content: modelUserText })
+  // 中断控制器（abort 来源：用户点停止 / 客户端断开 / 页面刷新导致 SSE 连接关闭）
+  const abortController = new AbortController()
+  let interrupted = false
+  abortController.signal.addEventListener('abort', () => { interrupted = true })
+  activeRuns.set(session.id, { abort: () => abortController.abort() })
+  // 清理上一轮残留的命令进程（防异常退出的 turn 留下幽灵进程）
+  void killSessionProcesses(session.id)
 
   let assistantText = ''
   let step = 0
@@ -468,76 +492,119 @@ export async function runTurn(
   // 实际执行的工具调用记录（execute 端收集：output/状态/耗时完整，与前端事件同源；
   // AI SDK v7 的 step.toolCalls 不含 result，无法从中取输出）
   const executedToolCalls: ToolCallRecord[] = []
-
-  // 中断控制器（abort 来源：用户点停止 / 客户端断开 / 页面刷新导致 SSE 连接关闭）
-  const abortController = new AbortController()
-  let interrupted = false
-  abortController.signal.addEventListener('abort', () => { interrupted = true })
-  activeRuns.set(session.id, { abort: () => abortController.abort() })
-  // 清理上一轮残留的命令进程（防异常退出的 turn 留下幽灵进程）
-  void killSessionProcesses(session.id)
-
-  const result = await streamText({
-    model: createModelForAgent(agent),
-    system,
-    messages: history,
-    tools: Object.keys(tools).length ? (tools as never) : undefined,
-    stopWhen: isStepCount(MAX_STEPS),
-    abortSignal: abortController.signal,
-    // 思考模式（reasoning）：仅 DeepSeek 渠道支持；其他 provider 不传（避免请求报错）
-    providerOptions: buildProviderOptions(agent, reasoning),
-    onChunk: ({ chunk }) => {
-      if (chunk.type === 'text-delta') {
-        assistantText += chunk.text
-        const last = segments[segments.length - 1]
-        if (last && last.kind === 'text') last.text += chunk.text
-        else segments.push({ kind: 'text', text: chunk.text })
-        emit({ type: 'text', sessionId: session.id, delta: chunk.text })
-      }
-    },
-    onStepEnd: (stepResult) => {
-      step += 1
-      emit({ type: 'step', sessionId: session.id, step })
-      if (stepResult.usage) {
-        inputTokens += stepResult.usage.inputTokens ?? 0
-        outputTokens += stepResult.usage.outputTokens ?? 0
-      }
-    },
-    onEnd: (finish) => {
-      if (finish.usage) {
-        inputTokens = finish.usage.inputTokens ?? inputTokens
-        outputTokens = finish.usage.outputTokens ?? outputTokens
-      }
-    },
-  })
-
-  // 等待流结束并检测模型调用错误（AI SDK 懒执行：401/网络错误在 await steps 时抛出）
-  // 工具调用记录不再从 steps 解析（v7 的 toolCalls 不含 result）——用 execute 端收集的 executedToolCalls
   let modelError: Error | null = null
-  try {
-    await result.steps
-  } catch (err) {
-    // 模型调用失败（401 无 key / 网络 / 模型失效等）发生在这里（AI SDK 懒执行）。
-    // 不能吞掉：否则前端只会收到一条空消息、没有任何错误提示。
-    // 用户主动中断（abort）不算错误，静默返回。
-    if (!interrupted) modelError = err as Error
+
+  // 一次完整模型请求（含流式收尾）。返回 'ok'（成功）/ 'overflow'（上下文溢出，可恢复）/ 'error'。
+  // 溢出恢复借鉴 DSH compaction-basic：provider 确认上下文溢出 → 压缩 → 重试该请求。
+  async function attemptModel(): Promise<'ok' | 'overflow' | 'error'> {
+    // 重试前重置本轮累计（工具会重新执行并重新发事件，属溢出恢复的已知行为）
+    assistantText = ''
+    step = 0
+    inputTokens = 0
+    outputTokens = 0
+    segments.length = 0
+    executedToolCalls.length = 0
+    modelError = null
+
+    // 历史摘要（压缩后存在 session.summary，重试时可能刚被改写，故在此处重新读取）
+    const summaryBlock = session.summary
+      ? `\n\n---\n\n# 历史对话摘要\n以下是对较早对话的压缩摘要，请基于它继续，不要重复已确认的内容：\n${session.summary}`
+      : ''
+    // system prompt = persona + 技能注入 + 历史摘要 + 执行约束 + 工具选择策略
+    const system = `${agent.persona}\n${injectSkills(agent.skillIds)}${summaryBlock}${memoryBlock}${projectMemoryBlock}${stepBudget}`
+
+    // 历史消息（AI SDK 格式）
+    const history = session.messages.slice(0, -1).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }))
+    history.push({ role: 'user', content: modelUserText })
+
+    const result = await streamText({
+      model: createModelForAgent(agent),
+      system,
+      messages: history,
+      tools: Object.keys(tools).length ? (tools as never) : undefined,
+      stopWhen: isStepCount(MAX_STEPS),
+      abortSignal: abortController.signal,
+      // 思考模式（reasoning）：仅 DeepSeek 渠道支持；其他 provider 不传（避免请求报错）
+      providerOptions: buildProviderOptions(agent, reasoning),
+      onChunk: ({ chunk }) => {
+        if (chunk.type === 'text-delta') {
+          assistantText += chunk.text
+          const last = segments[segments.length - 1]
+          if (last && last.kind === 'text') last.text += chunk.text
+          else segments.push({ kind: 'text', text: chunk.text })
+          emit({ type: 'text', sessionId: session.id, delta: chunk.text })
+        }
+      },
+      onStepEnd: (stepResult) => {
+        step += 1
+        emit({ type: 'step', sessionId: session.id, step })
+        if (stepResult.usage) {
+          inputTokens += stepResult.usage.inputTokens ?? 0
+          outputTokens += stepResult.usage.outputTokens ?? 0
+        }
+      },
+      onEnd: (finish) => {
+        if (finish.usage) {
+          inputTokens = finish.usage.inputTokens ?? inputTokens
+          outputTokens = finish.usage.outputTokens ?? outputTokens
+        }
+      },
+    })
+
+    // 等待流结束并检测模型调用错误（AI SDK 懒执行：401/网络错误在 await steps 时抛出）
+    // 工具调用记录不再从 steps 解析（v7 的 toolCalls 不含 result）——用 execute 端收集的 executedToolCalls
+    try {
+      await result.steps
+    } catch (err) {
+      // 模型调用失败（401 无 key / 网络 / 模型失效等）发生在这里（AI SDK 懒执行）。
+      // 不能吞掉：否则前端只会收到一条空消息、没有任何错误提示。
+      // 用户主动中断（abort）不算错误，静默返回。
+      if (!interrupted) modelError = err as Error
+    }
+
+    // 最终文本（若 onChunk 因中断未完整，取 result.text）
+    if (!assistantText) {
+      try {
+        assistantText = await result.text
+      } catch (err) {
+        // 中断时 result.text 不可用；有部分文本则保留，无文本则不落盘占位符
+        if (!interrupted && !modelError) modelError = err as Error
+      }
+    }
+
+    if (modelError && !interrupted && isContextWindowExceededError(modelError)) return 'overflow'
+    return modelError && !interrupted ? 'error' : 'ok'
   }
 
-  // 最终文本（若 onChunk 因中断未完整，取 result.text）
-  if (!assistantText) {
+  let outcome = await attemptModel()
+  if (outcome === 'overflow' && !interrupted) {
+    // 上下文溢出恢复：强制压缩旧历史（保留更少）腾出空间，然后重试一次。
+    // 只有压缩真正腾出空间才重试；压不动（如全是本轮新消息）直接透出原错误，
+    // 避免白白把工具重跑一遍。DSH 的 maxOverflowRetries 默认同为 1。
+    let didCompact = false
     try {
-      assistantText = await result.text
+      const cres = await compactSession(session, agent, { force: true, keep: OVERFLOW_COMPACT_KEEP })
+      if (cres) {
+        didCompact = true
+        emit({ type: 'compact', sessionId: session.id, summary: cres.summary, removed: cres.removed, kept: cres.kept, trigger: 'overflow' })
+        console.log(`[compact:overflow] session ${session.id}: removed ${cres.removed}, kept ${cres.kept}`)
+      }
     } catch (err) {
-      // 中断时 result.text 不可用；有部分文本则保留，无文本则不落盘占位符
-      if (!interrupted && !modelError) modelError = err as Error
+      // 溢出压缩失败不阻塞：保留原请求错误给前端（用户可手动压缩或新开会话）
+      console.warn(`[compact:overflow] failed: ${(err as Error).message}`)
     }
+    if (didCompact) outcome = await attemptModel()
   }
 
   // 模型调用失败：发 error 事件让前端翻译成用户可读的提示（不落盘空消息）
   if (modelError && !interrupted) {
     activeRuns.delete(session.id)
     void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
-    emit({ type: 'error', sessionId: session.id, message: modelError.message })
+    // modelError 在 attemptModel 内赋值，外层控制流收窄为 null，此处断言回 Error
+    emit({ type: 'error', sessionId: session.id, message: (modelError as Error).message })
     return { id: uid(), role: 'assistant', content: '', createdAt: Date.now() }
   }
 
@@ -564,7 +631,7 @@ export async function runTurn(
   emit({ type: 'done', sessionId: session.id, message: finalMsg })
 
   activeRuns.delete(session.id)
-    void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
+  void killSessionProcesses(session.id) // 兜底清理该会话残留命令进程（含中断路径）
   return finalMsg
 }
 

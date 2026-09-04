@@ -35,7 +35,8 @@
 - ✅ **工具调用卡片**：实时展示工具输入 / 输出 / 耗时 / 状态
 - ✅ **轨迹视图**：每步工具调用时间线 + inspector（输入 / 输出 / 耗时 / token）
 - ✅ **中断 / 继续**：流式期间可 Stop，已生成内容保留
-- ✅ **上下文压缩**：token 感知。上下文占用接近模型窗口上限时（默认 90%，真实 API 计数），LLM 自动把较早历史总结为摘要（注入 system prompt）并保留最近 20 条，长对话不会溢出
+- ✅ **上下文压缩**：token 感知。上下文占用接近模型窗口上限时（默认 90%，真实 API 计数），LLM 自动把较早历史总结为摘要（注入 system prompt），按"条数 + 窗口 16% token 预算"保留近期消息，长对话不会溢出
+- ✅ **上下文护栏（对齐 DSH）**：超大工具输出喂模型前自动修剪（head + 省略标记 + tail，展示仍完整）；模型报"上下文超出"时先压缩再自动重试一次——双保险防溢出
 - ✅ **终端执行（Codex 模式）**：`run_command` 在工作区执行 shell 命令（npm / git / node / python…），捕获输出、超时自动终止、中断时清理整个进程树。读代码、改代码、跑构建/测试验证、启动项目，都能在对话里完成
 - ✅ **六大核心编程工具（对齐 Claude Code）**：`read_file` / `edit_file` / `write_file`（filesystem MCP）+ `search_files`（grep）+ `glob`（文件名模式匹配，内置）+ `run_command`（bash）——让 Agent 真正能改代码的工具集
 - ✅ **Vibe 自治循环**：输入目标后点 Vibe（🚀 按钮）。Agent 自动规划、实现、验证、自愈，多轮循环直到收敛（以 `[DONE]` 信号为准），带轮数/时长预算，连续相同失败自动熔断止损；中断时清理运行中的进程
@@ -175,6 +176,11 @@ nova-agent/
 | `NOVA_AGENT_COMPACT_PCT` | `90` | 自动压缩阈值：上下文占用超过模型窗口的该百分比即压缩（token 感知，按最近一次 API 的真实输入计数） |
 | `NOVA_AGENT_COMPACT_MIN` | `40` | 消息数兜底：超过该条数强制压缩（与 token 阈值双条件） |
 | `NOVA_AGENT_COMPACT_KEEP` | `20` | 压缩后保留的最近消息数（更早的由 LLM 总结） |
+| `NOVA_AGENT_COMPACT_RETAIN_PCT` | `16` | 保留预算：保留部分估算 token 不超过窗口的该百分比（对齐 DSH retainRatio；超预算时收紧保留，至少留 `NOVA_AGENT_COMPACT_MIN_KEEP` 条） |
+| `NOVA_AGENT_COMPACT_MIN_KEEP` | `5` | 保留条数下限（预算再紧也保底） |
+| `NOVA_AGENT_PRUNE_THRESHOLD` | `8192` | 工具结果修剪阈值（字符）：超过才修剪喂给模型的版本（展示仍完整） |
+| `NOVA_AGENT_PRUNE_HEAD` | `4096` | 修剪后保留开头字符数 |
+| `NOVA_AGENT_PRUNE_TAIL` | `1024` | 修剪后保留结尾字符数 |
 
 ---
 

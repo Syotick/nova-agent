@@ -564,6 +564,7 @@ function handleEvent(set: StoreSet, get: () => MainState, e: ChatEvent) {
       patched.messages = patched.messages.slice(e.removed)
       patched.summary = e.summary
       patched.lastCompactRemoved = e.removed // 内存态（不落盘），供横幅显示"已压缩 N 条"
+      patched.lastCompactTrigger = e.trigger ?? 'auto' // overflow = 上下文溢出自动恢复
       set({ sessions: s.sessions.map((x) => (x.id === session.id ? patched : x)) })
       break
     }

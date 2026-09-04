@@ -77,6 +77,8 @@ export interface ToolCallRecord {
   status: 'running' | 'success' | 'error'
   startedAt: number
   durationMs: number
+  /** 输出过大时模型侧是否被修剪过（完整输出仍在 output） */
+  modelPruned?: boolean
 }
 
 /** 消息附件 */
@@ -116,6 +118,8 @@ export interface Session {
   summary?: string
   /** 最近一次压缩移除的消息数（内存态，不落盘） */
   lastCompactRemoved?: number
+  /** 最近一次压缩的触发原因（auto=正常触发 / overflow=上下文溢出自动恢复） */
+  lastCompactTrigger?: 'auto' | 'overflow'
 }
 
 /** 定时任务（5 段 cron） */
@@ -164,7 +168,7 @@ export type ChatEvent =
   | { type: 'step'; sessionId: string; step: number }
   | { type: 'usage'; sessionId: string; input: number; output: number }
   | { type: 'done'; sessionId: string; message: Message }
-  | { type: 'compact'; sessionId: string; summary: string; removed: number; kept: number }
+  | { type: 'compact'; sessionId: string; summary: string; removed: number; kept: number; trigger?: 'auto' | 'overflow' }
   | { type: 'error'; sessionId: string; message: string }
   // vibe 自治循环事件（目标驱动多轮执行）
   | { type: 'vibe_start'; sessionId: string; goal: string; maxRounds: number }

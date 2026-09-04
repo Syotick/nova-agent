@@ -35,7 +35,8 @@
 - ✅ **Tool call cards**: live tool cards (input / output / duration / status)
 - ✅ **Trajectory view**: per-step timeline + inspector (input / output / duration / tokens)
 - ✅ **Stop & resume**: Stop button during streaming; generated content is preserved
-- ✅ **Context compaction**: when a session exceeds 40 messages, earlier history is summarized by the LLM (injected into the system prompt), keeping the last 20, so long conversations never overflow
+- ✅ **Context compaction**: token-aware. When context usage approaches the model's window (default 90%, real API counts), earlier history is summarized by the LLM (injected into the system prompt) and recent messages are kept by both a message count and a 16%-of-window token budget, so long conversations never overflow
+- ✅ **Context guards (DSH-aligned)**: oversized tool outputs are pruned before being fed to the model (head + marker + tail; the full output is still shown), and a provider-confirmed context overflow triggers compaction + one automatic retry instead of failing the turn
 - ✅ **Terminal (Codex mode)**: `run_command` runs shell commands in the workspace (npm / git / node / python...) with output capture, timeout auto-kill and whole process-tree cleanup on interrupt. Read code, edit code, verify with builds/tests, start the project — all from chat.
 - ✅ **Six core coding tools (Claude Code compatible)**: `read_file` / `edit_file` / `write_file` (filesystem MCP), `search_files` (grep), `glob` (filename pattern matching, built-in), and `run_command` (bash) — the toolset that lets an agent actually edit a codebase.
 - ✅ **Vibe loop (autonomous goals)**: type a goal and press Vibe (🚀 in the UI). The agent plans, implements, verifies and self-heals across multiple rounds until it converges (signalled by `[DONE]`), bounded by round/time budgets and a circuit breaker that stops on repeated identical failures. Interrupting cleans up running processes.
@@ -175,8 +176,14 @@ nova-agent/
 |---|---|---|
 | `DEEPSEEK_API_KEY` | — | LLM API key (fallback if no external key file) |
 | `NOVA_AGENT_PORT` | `8787` | Backend port |
+| `NOVA_AGENT_COMPACT_PCT` | `90` | Auto-compact threshold: compress when context usage exceeds this % of the model window (token-aware, uses the latest real API input count) |
 | `NOVA_AGENT_COMPACT_MIN` | `40` | Auto-compact trigger: compress when messages exceed this |
 | `NOVA_AGENT_COMPACT_KEEP` | `20` | Messages kept after compaction (earlier ones are summarized) |
+| `NOVA_AGENT_COMPACT_RETAIN_PCT` | `16` | Retention budget: kept text may not exceed this % of the window (DSH retainRatio; tightens retention when over budget, keeps at least `NOVA_AGENT_COMPACT_MIN_KEEP` messages) |
+| `NOVA_AGENT_COMPACT_MIN_KEEP` | `5` | Minimum messages kept even under a tight budget |
+| `NOVA_AGENT_PRUNE_THRESHOLD` | `8192` | Tool-result prune threshold (chars): only larger outputs are pruned for the model (display stays full) |
+| `NOVA_AGENT_PRUNE_HEAD` | `4096` | Head chars kept after pruning |
+| `NOVA_AGENT_PRUNE_TAIL` | `1024` | Tail chars kept after pruning |
 ---
 
 ## 📂 Workspace (agent file boundary)

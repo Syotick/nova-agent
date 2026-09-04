@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { estimateTokens, shouldCompact, contextWindowFor, contextUsage, sanitizeContextWindow, COMPACT_PCT } from '../compact.js'
+import {
+  estimateTokens, shouldCompact, contextWindowFor, contextUsage, sanitizeContextWindow, COMPACT_PCT,
+  maybePruneToolOutput, PRUNE_MARKER, PRUNE_THRESHOLD_CHARS, PRUNE_HEAD_CHARS, PRUNE_TAIL_CHARS,
+  isContextWindowExceededError, computeKeepFrom, COMPACT_MIN_KEEP,
+} from '../compact.js'
 import type { Session } from '../types.js'
 
 function mkSession(messages: Array<{ role: string; content: string; tokens?: { input: number; output: number } }>): Session {
@@ -65,5 +69,90 @@ describe('compact 估算', () => {
     expect(sanitizeContextWindow('abc')).toBe(1_000_000)
     expect(sanitizeContextWindow('200000')).toBe(200_000)
     expect(sanitizeContextWindow(200_000)).toBe(200_000)
+  })
+})
+
+describe('工具结果修剪（DSH pruner 对齐：8192 → head 4096 + 标记 + tail 1024）', () => {
+  it('未超阈值原样返回', () => {
+    const short = 'a'.repeat(PRUNE_THRESHOLD_CHARS)
+    expect(maybePruneToolOutput(short)).toBe(short) // 恰好等于阈值不修剪
+    expect(maybePruneToolOutput('你好')).toBe('你好')
+  })
+
+  it('超阈值修剪为 head + 标记 + tail', () => {
+    const long = 'x'.repeat(PRUNE_THRESHOLD_CHARS + 1000)
+    const out = maybePruneToolOutput(long)
+    expect(out).toContain(PRUNE_MARKER)
+    const [head, tail] = out.split(PRUNE_MARKER)
+    expect(head.length).toBe(PRUNE_HEAD_CHARS)
+    expect(tail.length).toBe(PRUNE_TAIL_CHARS)
+    // 头尾保留原文对应片段（不丢失关键信息）
+    expect(head).toBe('x'.repeat(PRUNE_HEAD_CHARS))
+    expect(tail).toBe('x'.repeat(PRUNE_TAIL_CHARS))
+    expect(out.length).toBeLessThan(long.length)
+  })
+
+  it('按 Unicode 码点修剪：emoji（代理对）不被拆开', () => {
+    const emoji = '😀'.repeat(PRUNE_THRESHOLD_CHARS + 500) // 每个 emoji 是 2 个 UTF-16 单元、1 个码点
+    const out = maybePruneToolOutput(emoji)
+    // 无半个代理对：每个码点都是完整 emoji，不含替换符
+    expect(out).not.toContain('\uFFFD')
+    const pts = Array.from(out)
+    expect(pts.length).toBe(PRUNE_HEAD_CHARS + Array.from(PRUNE_MARKER).length + PRUNE_TAIL_CHARS)
+    expect(pts.slice(0, 3).join('')).toBe('😀😀😀')
+    expect(pts.slice(-3).join('')).toBe('😀😀😀')
+  })
+})
+
+describe('上下文溢出检测（DSH isContextWindowExceededError 对齐）', () => {
+  it('识别常见 provider 溢出措辞', () => {
+    expect(isContextWindowExceededError(new Error("This model's maximum context length is 128000 tokens. However, you requested 130000 tokens."))).toBe(true)
+    expect(isContextWindowExceededError(new Error('context window exceeded'))).toBe(true)
+    expect(isContextWindowExceededError(new Error('The input is too long for this model'))).toBe(true)
+    expect(isContextWindowExceededError(new Error('prompt exceeds model context window'))).toBe(true)
+    expect(isContextWindowExceededError(new Error('Request too large for context'))).toBe(true)
+    expect(isContextWindowExceededError('context_length_exceeded')).toBe(true)
+  })
+
+  it('不误伤其他错误（限流/鉴权/网络/余额）', () => {
+    expect(isContextWindowExceededError(new Error('rate limit exceeded'))).toBe(false)
+    expect(isContextWindowExceededError(new Error('invalid api key'))).toBe(false)
+    expect(isContextWindowExceededError(new Error('fetch failed'))).toBe(false)
+    expect(isContextWindowExceededError(new Error('insufficient balance'))).toBe(false)
+    expect(isContextWindowExceededError(new Error('quota exceeded'))).toBe(false)
+  })
+
+  it('沿 cause 链识别（传输层包装的溢出错误）', () => {
+    const inner = new Error("This model's maximum context length is 128000 tokens. However, you requested 200000 tokens.")
+    const wrapped = new Error('fetch failed', { cause: inner })
+    expect(isContextWindowExceededError(wrapped)).toBe(true)
+  })
+})
+
+describe('computeKeepFrom：保留条数 + token 预算双约束', () => {
+  it('默认：保留最近 20 条', () => {
+    const msgs = Array.from({ length: 30 }, (_, i) => ({ content: `消息${i}` }))
+    expect(computeKeepFrom(msgs, 20, 1_000_000)).toBe(10)
+  })
+
+  it('keep 覆盖：溢出恢复保留更少', () => {
+    const msgs = Array.from({ length: 30 }, (_, i) => ({ content: `消息${i}` }))
+    expect(computeKeepFrom(msgs, 6, 1_000_000)).toBe(24)
+  })
+
+  it('无可压缩旧消息（只有 1 条）返回 -1', () => {
+    expect(computeKeepFrom([{ content: 'hi' }], 20, 1_000_000)).toBe(-1)
+  })
+
+  it('保留预算收紧：把最旧保留消息并入压缩，但至少保留 COMPACT_MIN_KEEP 条', () => {
+    // 10 条 × 100 个中文字 ≈ 70 token/条；预算 160 token → 全保留超预算
+    const msgs = Array.from({ length: 10 }, () => ({ content: '你'.repeat(100) }))
+    // 8 条保留 → 560 token 超 160；逐条裁剪直到只剩 COMPACT_MIN_KEEP 条
+    expect(computeKeepFrom(msgs, 8, 160)).toBe(10 - COMPACT_MIN_KEEP)
+  })
+
+  it('保留预算充足时不裁剪', () => {
+    const msgs = Array.from({ length: 10 }, () => ({ content: 'x' })) // 每条 1 token
+    expect(computeKeepFrom(msgs, 8, 160)).toBe(2) // 保留 8 条 × 1 token ≤ 160
   })
 })
