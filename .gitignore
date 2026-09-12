@@ -43,3 +43,6 @@ Thumbs.db
 
 # 内部开发文档（教程/学习/维护笔记，仅本机，不上传 GitHub）
 devdocs/
+
+# 外部工具工作区记忆（非项目文件）
+.workbuddy/

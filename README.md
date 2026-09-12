@@ -37,8 +37,11 @@
 - ✅ **中断 / 继续**：流式期间可 Stop，已生成内容保留
 - ✅ **上下文压缩**：token 感知。上下文占用接近模型窗口上限时（默认 90%，真实 API 计数），LLM 自动把较早历史总结为摘要（注入 system prompt），按"条数 + 窗口 16% token 预算"保留近期消息，长对话不会溢出
 - ✅ **上下文护栏（对齐 DSH）**：超大工具输出喂模型前自动修剪（head + 省略标记 + tail，展示仍完整）；模型报"上下文超出"时先压缩再自动重试一次——双保险防溢出
+- ✅ **跨会话记忆**：`remember` 工具自动写入（词面检索 + 去重合并 + LRU 上限 100 条），检索按"相关度×热度"综合排序 + 最近记忆兜底；一个开关管住"工具 + 注入 + 指令段"，按 Agent 一键可插拔
+- ✅ **技能按需加载（对齐 DSH）**：勾选的技能只向 system prompt 注入"目录"（名字 + 描述 + 使用时机几行），正文由 `load_skill` 工具按名取全文——不用的技能不占 token；`load_skill` 随"勾选技能"自动装配
+- ✅ **统一工具注册表（ToolRegistry）**：内置工具（`glob` / `run_command` / `remember` / `subagent` / `web_search` / `load_skill`）与 MCP 工具走同一条装配管道——可插拔、可分配，想加工具主循环零改动
 - ✅ **终端执行（Codex 模式）**：`run_command` 在工作区执行 shell 命令（npm / git / node / python…），捕获输出、超时自动终止、中断时清理整个进程树。读代码、改代码、跑构建/测试验证、启动项目，都能在对话里完成
-- ✅ **六大核心编程工具（对齐 Claude Code）**：`read_file` / `edit_file` / `write_file`（filesystem MCP）+ `search_files`（grep）+ `glob`（文件名模式匹配，内置）+ `run_command`（bash）——让 Agent 真正能改代码的工具集
+- ✅ **文件读写（filesystem MCP）**：`read_file` / `edit_file` / `write_file` / `search_files`（grep）由 filesystem MCP server 提供（仅限可配置工作区）——配合内置 `glob` / `run_command` 组成真正能改代码的工具集
 - ✅ **Vibe 自治循环**：输入目标后点 Vibe（🚀 按钮）。Agent 自动规划、实现、验证、自愈，多轮循环直到收敛（以 `[DONE]` 信号为准），带轮数/时长预算，连续相同失败自动熔断止损；中断时清理运行中的进程
 
 ### 多 Agent 管理
@@ -210,11 +213,14 @@ name: 技能名
 description: 简介
 when_to_use: 使用时机
 ---
-操作步骤正文（注入 system prompt）
+操作步骤正文（懒加载：模型用 load_skill 工具按需取全文，不常驻 system prompt）
 ```
 
+> 技能**按需加载**：勾选后 system prompt 只进"目录"（名字 + 描述 + 使用时机几行），模型用到时调 `load_skill` 取正文——不用的技能不占 token。
+
 ### 新增工具（零代码）
-`mcp-servers/` 加一个 JSON 配置即可接入任意 MCP server：
+**内置工具**：在 `server/toolRegistry.ts` 的 `builtinToolDefs` 里加一个定义（`{ id, name, description, inputSchema, createExecute(runtime) }`）即注册，主循环零改动（统一工具注册表，与 MCP 同管道）。
+**MCP 工具**：`mcp-servers/` 加一个 JSON 配置即可接入任意 MCP server：
 
 ```json
 {
@@ -247,6 +253,7 @@ when_to_use: 使用时机
 | 层 | 保护 |
 |---|---|
 | **工作区隔离** | filesystem MCP 只允许访问工作区（默认 `workspace/`，可在设置页配置），Agent 读不到项目代码 |
+| **能力按需授权** | 内置工具、技能、MCP server 都按 Agent 勾选启用——未勾选不可见不可调（`load_skill` 还只在勾选技能后装配） |
 | **Key 外置** | API key 存项目外 `.nova-agent-key.json`，Agent 不可达 |
 | **XSS 防护** | markdown-it `html: false`，禁原始 HTML |
 | **确认弹窗** | 删除操作需自定义确认 |
