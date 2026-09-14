@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { db } from '../db.js'
 import { builtinToolDefs, assembleTools, shouldRegisterBuiltin } from '../toolRegistry.js'
+import { createSubagent, getSubagent, saveSubagent, setSubagentAbort, appendNotice } from '../subagents.js'
 import type { Agent, Message, Session, ToolRuntime } from '../types.js'
 
 const TEST_AGENT = '__test_toolreg_agent__'
@@ -12,9 +13,10 @@ beforeAll(() => {
   ).run(TEST_AGENT, 'test', '', 'deepseek/deepseek-v4-flash', '[]', '[]', '#4d6bfe', Date.now())
 })
 
-// DB 是持久化文件：每个用例前清理该 agent 的记忆，避免跨用例/跨运行污染
+// DB 是持久化文件：每个用例前清理该 agent 的记忆与后台子代理，避免跨用例/跨运行污染
 beforeEach(() => {
   db.prepare('DELETE FROM memories WHERE agent_id = ?').run(TEST_AGENT)
+  db.prepare('DELETE FROM subagents').run()
 })
 
 function makeAgent(builtinTools?: string[], skillIds: string[] = []): Agent {
@@ -49,9 +51,12 @@ function makeRt(agent: Agent): ToolRuntime {
 }
 
 describe('toolRegistry 定义完整性', () => {
-  it('6 个内置工具定义齐全，元数据完整', () => {
+  it('9 个内置工具定义齐全，元数据完整', () => {
     const names = builtinToolDefs.map((d) => d.name).sort()
-    expect(names).toEqual(['glob', 'load_skill', 'remember', 'run_command', 'subagent', 'web_search'])
+    expect(names).toEqual([
+      'glob', 'interrupt_agent', 'list_agents', 'load_skill', 'remember',
+      'run_command', 'send_message', 'subagent', 'web_search',
+    ])
     for (const def of builtinToolDefs) {
       expect(def.description.length).toBeGreaterThan(10)
       expect(def.inputSchema.type).toBe('object')
@@ -67,15 +72,20 @@ describe('toolRegistry 定义完整性', () => {
 })
 
 describe('toolRegistry 装配（assembleTools）', () => {
-  it('按 Agent 勾选过滤内置工具', () => {
+  it('按 Agent 勾选过滤内置工具（父子通信控制工具始终装配）', () => {
     const tools = assembleTools(makeAgent(['glob', 'remember']), makeRt(makeAgent(['glob', 'remember'])), [])
-    expect(Object.keys(tools).sort()).toEqual(['glob', 'remember'])
+    expect(Object.keys(tools).sort()).toEqual([
+      'glob', 'interrupt_agent', 'list_agents', 'remember', 'send_message',
+    ])
   })
 
   it('未配置 builtinTools = 全部内置工具可用', () => {
     const tools = assembleTools(makeAgent(undefined), makeRt(makeAgent(undefined)), [])
     // 注意：load_skill 是条件装配——没勾技能（skillIds=[]）时不注册
-    expect(Object.keys(tools).sort()).toEqual(['glob', 'remember', 'run_command', 'subagent', 'web_search'])
+    expect(Object.keys(tools).sort()).toEqual([
+      'glob', 'interrupt_agent', 'list_agents', 'remember',
+      'run_command', 'send_message', 'subagent', 'web_search',
+    ])
   })
 
   it('load_skill：勾选了技能才装配（条件装配）', () => {
@@ -107,7 +117,9 @@ describe('toolRegistry 装配（assembleTools）', () => {
       inputSchema: { type: 'object', properties: { a: { type: 'string' } } },
     }]
     const tools = assembleTools(makeAgent(['glob']), makeRt(makeAgent(['glob'])), mcp)
-    expect(Object.keys(tools).sort()).toEqual(['custom_ts_tool', 'glob'])
+    expect(Object.keys(tools).sort()).toEqual([
+      'custom_ts_tool', 'glob', 'interrupt_agent', 'list_agents', 'send_message',
+    ])
   })
 })
 
@@ -278,5 +290,102 @@ describe('toolRegistry subagent：fork / spawn + 结构化结果', () => {
     const res = await tool(rt).execute({})
     expect(res.isError).toBe(true)
     expect(res.content).toContain('task 参数必填')
+  })
+})
+
+describe('toolRegistry 后台子代理（continuable）控制工具族', () => {
+  function agent(rt: ToolRuntime) {
+    const tools = assembleTools(rt.agent, rt, [])
+    return tools as Record<string, { execute: (args?: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }> }>
+  }
+  function makeRt2(sessionId = 'parent-s1'): ToolRuntime {
+    const a = makeAgent(undefined)
+    const rt = makeRt(a)
+    rt.session = { id: sessionId, agentId: a.id, title: '', messages: [], createdAt: 0, updatedAt: 0 }
+    return rt
+  }
+
+  it('background=true：立即返回 durable id 并落库（不阻塞等待子轮）', async () => {
+    const rt = makeRt2()
+    const res = await agent(rt).subagent.execute({ task: '后台查证', background: true })
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('[子代理已启动]')
+    const id = res.content.match(/sub_[a-z0-9]+/)?.[0]
+    expect(id).toBeTruthy()
+    const rec = getSubagent(id!)
+    expect(rec).toBeTruthy()
+    expect(rec!.task).toContain('后台查证')
+    expect(rec!.parentId).toBe('parent-s1')
+  })
+
+  it('send_message：投递到运行中子代理的 inbox（排队）', async () => {
+    const rt = makeRt2()
+    const rec = createSubagent({ parentId: 'parent-s1', agentId: TEST_AGENT, task: '后台任务' })
+    saveSubagent({ ...rec, status: 'running' }) // 设为运行中 → send_message 排队不触发 pump
+    const res = await agent(rt).send_message.execute({ to: rec.id, content: '给我最新进展' })
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('排队')
+    expect(getSubagent(rec.id)!.inbox.length).toBe(1)
+    expect(getSubagent(rec.id)!.inbox[0].content).toBe('给我最新进展')
+  })
+
+  it('send_message：未知子代理报错', async () => {
+    const rt = makeRt2()
+    const res = await agent(rt).send_message.execute({ to: 'sub_nope', content: 'hi' })
+    expect(res.isError).toBe(true)
+    expect(res.content).toContain('找不到子代理')
+  })
+
+  it('send_message to=parent：仅子代理会话可用，留言写入待送达通知', async () => {
+    const rt = makeRt2()
+    // 非子会话调 to=parent → 报错
+    const bad = await agent(rt).send_message.execute({ to: 'parent', content: 'hi' })
+    expect(bad.isError).toBe(true)
+    expect(bad.content).toContain('只有后台子代理')
+    // 子代理会话（session.id = sub_xxx）调 to=parent → 留言
+    const rec = createSubagent({ parentId: 'parent-s1', agentId: TEST_AGENT, task: 't' })
+    rt.session.id = rec.id
+    const ok = await agent(rt).send_message.execute({ to: 'parent', content: '父，我查到一半了' })
+    expect(ok.isError).toBeFalsy()
+    expect(getSubagent(rec.id)!.notice).toContain('父，我查到一半了')
+    // 未被 consume 前父侧能看到（appendNotice 已设 consumed=0）
+    expect(db.prepare('SELECT notice_consumed AS c FROM subagents WHERE id = ?').get(rec.id)).toMatchObject({ c: 0 })
+  })
+
+  it('list_agents：列出当前会话派生的后台子代理', async () => {
+    const rt = makeRt2()
+    createSubagent({ parentId: 'parent-s1', agentId: TEST_AGENT, task: '调研 A' })
+    createSubagent({ parentId: 'other-parent', agentId: TEST_AGENT, task: '别人的子' })
+    const res = await agent(rt).list_agents.execute({})
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('调研 A')
+    expect(res.content).not.toContain('别人的子')
+    // 无子代理
+    const rt2 = makeRt2('parent-empty')
+    const res2 = await agent(rt2).list_agents.execute({})
+    expect(res2.content).toContain('没有派生的后台子代理')
+  })
+
+  it('interrupt_agent：中断运行中的子代理当前轮，空闲时提示无需中断', async () => {
+    const rt = makeRt2()
+    const rec = createSubagent({ parentId: 'parent-s1', agentId: TEST_AGENT, task: 't' })
+    setSubagentAbort(rec.id, () => {})
+    const res = await agent(rt).interrupt_agent.execute({ id: rec.id })
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('已请求中断')
+    // 第二次（abort 句柄已消费/空闲）
+    const res2 = await agent(rt).interrupt_agent.execute({ id: rec.id })
+    expect(res2.isError).toBe(true)
+    expect(res2.content).toContain('不在运行')
+    // 注册表保留
+    expect(getSubagent(rec.id)).toBeTruthy()
+  })
+
+  it('缺参校验：send_message 缺 content、interrupt_agent 缺 id 都报错', async () => {
+    const rt = makeRt2()
+    const r1 = await agent(rt).send_message.execute({ to: 'sub_x' })
+    expect(r1.isError).toBe(true)
+    const r2 = await agent(rt).interrupt_agent.execute({})
+    expect(r2.isError).toBe(true)
   })
 })

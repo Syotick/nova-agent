@@ -71,6 +71,24 @@ db.exec(`
     last_used_at INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_memories_agent ON memories(agent_id, created_at DESC);
+
+  -- 后台子代理（continuable subagent）：独立于 sessions 表的专属存储，
+  -- 会话列表/前端不受子代理污染；子代理的持久会话历史存在 messages 列。
+  CREATE TABLE IF NOT EXISTS subagents (
+    id              TEXT PRIMARY KEY,
+    parent_id       TEXT NOT NULL,
+    agent_id        TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    task            TEXT NOT NULL DEFAULT '',
+    model           TEXT,
+    status          TEXT NOT NULL DEFAULT 'idle',
+    inbox           TEXT NOT NULL DEFAULT '[]',
+    messages        TEXT NOT NULL DEFAULT '[]',
+    notice          TEXT NOT NULL DEFAULT '',
+    notice_consumed INTEGER NOT NULL DEFAULT 1,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_subagents_parent ON subagents(parent_id, updated_at DESC);
 `)
 
 // 内置工具配置列迁移：旧库的 agents 表没有 builtin_tools 列，补列（已存在则忽略）

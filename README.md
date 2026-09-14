@@ -39,7 +39,8 @@
 - ✅ **上下文护栏（对齐 DSH）**：超大工具输出喂模型前自动修剪（head + 省略标记 + tail，展示仍完整）；模型报"上下文超出"时先压缩再自动重试一次——双保险防溢出
 - ✅ **跨会话记忆**：`remember` 工具自动写入（词面检索 + 去重合并 + LRU 上限 100 条），检索按"相关度×热度"综合排序 + 最近记忆兜底；一个开关管住"工具 + 注入 + 指令段"，按 Agent 一键可插拔
 - ✅ **技能按需加载（对齐 DSH）**：勾选的技能只向 system prompt 注入"目录"（名字 + 描述 + 使用时机几行），正文由 `load_skill` 工具按名取全文——不用的技能不占 token；`load_skill` 随"勾选技能"自动装配
-- ✅ **统一工具注册表（ToolRegistry）**：内置工具（`glob` / `run_command` / `remember` / `subagent` / `web_search` / `load_skill`）与 MCP 工具走同一条装配管道——可插拔、可分配，想加工具主循环零改动
+- ✅ **统一工具注册表（ToolRegistry）**：内置工具（`glob` / `run_command` / `remember` / `subagent` / `web_search` / `load_skill` / `send_message` / `list_agents` / `interrupt_agent`）与 MCP 工具走同一条装配管道——可插拔、可分配，想加工具主循环零改动
+- ✅ **后台子代理（continuable，父子通信）**：`subagent` 加 `background: true` 即后台常驻子代理——立即返回 durable id、独立会话持久化；`send_message` 父子双向对话（运行中排队/空闲即启新轮）、`list_agents` 看活跃子代理、`interrupt_agent` 定向中断；子代理完成/失败自动以"结算通知"注入父的下一轮请求，父无需轮询
 - ✅ **终端执行（Codex 模式）**：`run_command` 在工作区执行 shell 命令（npm / git / node / python…），捕获输出、超时自动终止、中断时清理整个进程树。读代码、改代码、跑构建/测试验证、启动项目，都能在对话里完成
 - ✅ **文件读写（filesystem MCP）**：`read_file` / `edit_file` / `write_file` / `search_files`（grep）由 filesystem MCP server 提供（仅限可配置工作区）——配合内置 `glob` / `run_command` 组成真正能改代码的工具集
 - ✅ **Vibe 自治循环**：输入目标后点 Vibe（🚀 按钮）。Agent 自动规划、实现、验证、自愈，多轮循环直到收敛（以 `[DONE]` 信号为准），带轮数/时长预算，连续相同失败自动熔断止损；中断时清理运行中的进程

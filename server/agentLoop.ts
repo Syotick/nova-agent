@@ -11,6 +11,7 @@ import { createModelForAgent, resolveModel } from './models.js'
 import { assembleTools, shouldRegisterBuiltin } from './toolRegistry.js'
 import { newId } from './store.js'
 import { buildMemoryBlock, loadProjectMemory } from './memory.js'
+import { pendingNotices, consumeNotice } from './subagents.js'
 import { killSessionProcesses } from './terminal.js'
 
 // 步骤上限：浏览器/文件任务动辄 10-20 步，8 步会被截断导致任务无闭环
@@ -205,6 +206,16 @@ export async function runTurn(
       role: m.role,
       content: m.content,
     }))
+
+    // 后台子代理结算通知（settlement notice，对齐 DSH）：当前会话作为父时，
+    // 把已完成/失败的子代理结果注入本轮请求——父模型无需轮询就能感知子代理进展。
+    // 注入后立即消费（标记已送达），防溢出重试时重复注入。
+    const notices = pendingNotices(session.id)
+    for (const n of notices) {
+      history.push({ role: 'user', content: `[系统通知] 你的后台子代理有新动态：\n${n.text}` })
+      consumeNotice(n.id)
+    }
+
     history.push({ role: 'user', content: modelUserText })
 
     const result = await streamText({

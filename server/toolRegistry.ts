@@ -18,6 +18,11 @@ import { executeGlob } from './glob.js'
 import { newId } from './store.js'
 import { addMemory } from './memory.js'
 import { loadSkillContent } from './skills.js'
+import {
+  createSubagent, getSubagent, findSubagentBySessionId, listSubagents,
+  appendNotice, saveSubagent, setSubagentAbort, clearSubagentAbort, interruptSubagent,
+} from './subagents.js'
+import type { SubagentRecord } from './subagents.js'
 
 // 工具调用 id（与事件/轨迹共用同一 id，前端靠它关联工具卡）
 function uid(): string {
@@ -173,11 +178,66 @@ const rememberDef: ToolDef = {
   },
 }
 
+// ---------- 后台子代理（continuable）泵 ----------
+// 把子代理跑成一连串"轮"：首轮 = task，之后 = inbox 队首；一轮结束若队列空则 idle 收工，
+// 队列非空则继续。每轮 settle 时把结果 appendNotice 给父（父下一轮组装 history 时自动注入）。
+async function runSubagentTurn(rt: ToolRuntime, rec: SubagentRecord, content: string, depth: number) {
+  const session: Session = {
+    id: rec.id,
+    agentId: rec.agentId,
+    title: `[子代理] ${rec.task.slice(0, 30)}`,
+    messages: rec.messages, // 引用共享：runTurn push 后 rec.messages 同步
+    createdAt: rec.createdAt,
+    updatedAt: rec.updatedAt,
+  }
+  const agent = rec.model ? { ...rt.agent, model: rec.model } : rt.agent
+  try {
+    const msg = await rt.runSubagent(session, agent, content, () => {}, undefined, undefined, depth)
+    appendNotice(rec.id, `[子代理 ${rec.id} 已空闲]\n${msg.content?.trim() ? msg.content : '（无输出）'}`)
+  } catch (err) {
+    appendNotice(rec.id, `[子代理 ${rec.id} 失败：${(err as Error).message}]`)
+  }
+  saveSubagent(rec)
+}
+
+async function pumpSubagent(rt: ToolRuntime, id: string) {
+  let rec = getSubagent(id)
+  if (!rec) return
+  saveSubagent({ ...rec, status: 'running' })
+  setSubagentAbort(id, () => rt.abortRun(id))
+  // 中断传播：父 turn 中断时连带停子（防幽灵后台执行）
+  const subs = rt.activeSubruns.get(rt.session.id) ?? new Set<() => void>()
+  rt.activeSubruns.set(rt.session.id, subs)
+  const abortChild = () => rt.abortRun(id)
+  subs.add(abortChild)
+  try {
+    let first = true
+    while (rec) {
+      const content = first ? rec.task : (rec.inbox.shift()?.content ?? '')
+      first = false
+      if (!content.trim()) break
+      await runSubagentTurn(rt, rec, content, rt.depth + 1)
+      rec = getSubagent(id) // 一轮后读最新（send_message 可能新排队）
+      if (!rec) break
+      if (rec.inbox.length === 0) break
+    }
+  } finally {
+    const latest = getSubagent(id)
+    if (latest) saveSubagent({ ...latest, status: 'idle' })
+    clearSubagentAbort(id)
+    subs.delete(abortChild)
+    if (subs.size === 0) rt.activeSubruns.delete(rt.session.id)
+  }
+}
+
 const subagentDef: ToolDef = {
   id: 'subagent',
   name: 'subagent',
   description:
     '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），返回结构化结果（状态/步骤数/Token/结论/部分产出）。' +
+    '两种模式：background=false（默认）一次性子任务，跑完等结果；' +
+    'background=true 后台常驻子代理（continuable）：立即返回 durable id（sub_xxx），子代理后台独立运行，' +
+    '可随时用 send_message 与它对话、用 list_agents 查看、用 interrupt_agent 中断；它空闲/完成时会自动通知你。' +
     '适合：多个方向并行探索、独立审查、把大任务拆成小任务。task 必须是自包含的描述（目标+约束+交付格式）。' +
     'fork=false（默认）：子任务从零开始，task 必须自包含；fork=true：子任务继承父会话历史（已完成对话+当前用户消息），' +
     '适合"基于刚才的讨论继续"——注意 fork 是创建时的一次性快照，父之后的进展不会再带给子。' +
@@ -187,7 +247,8 @@ const subagentDef: ToolDef = {
     properties: {
       task: { type: 'string', description: '子任务描述（自包含：目标 + 约束 + 交付格式）' },
       model: { type: 'string', description: '可选：子 Agent 模型（provider/model），默认继承当前 Agent' },
-      fork: { type: 'boolean', description: '可选：true 时子任务继承父会话历史（默认 false 从零开始）' },
+      fork: { type: 'boolean', description: '可选（仅 background=false）：true 时子任务继承父会话历史（默认 false 从零开始）' },
+      background: { type: 'boolean', description: '可选：true 时创建后台常驻子代理（立即返回 durable id，不阻塞当前轮）；默认 false 一次性等待结果' },
     },
     required: ['task'],
   },
@@ -195,6 +256,7 @@ const subagentDef: ToolDef = {
     const task = String((args as { task?: unknown }).task ?? '').trim()
     const modelOverride = String((args as { model?: unknown }).model ?? '').trim() || undefined
     const fork = Boolean((args as { fork?: unknown }).fork)
+    const background = Boolean((args as { background?: unknown }).background)
     const record = startRecord(rt, 'subagent', args)
     try {
       if (!task) {
@@ -207,6 +269,19 @@ const subagentDef: ToolDef = {
         return { content: `Error: 子任务嵌套过深（最多 ${rt.subagentDepthLimit} 层），请直接在当前层完成`, isError: true }
       }
 
+      // background=true：后台常驻子代理（continuable）——立即返回 id，子代理后台异步泵轮
+      if (background) {
+        const rec = createSubagent({ parentId: rt.session.id, agentId: rt.agent.id, task, model: modelOverride })
+        void pumpSubagent(rt, rec.id)
+        const out =
+          `[子代理已启动] id: ${rec.id}（后台运行中）。\n` +
+          `任务：${task.slice(0, 120)}\n` +
+          `可随时用 send_message（to: ${rec.id}）与它对话，用 list_agents 查看状态，用 interrupt_agent 中断；它空闲/完成时会自动通知你。`
+        endRecord(rt, record, 'success', out)
+        return rt.toolResultForModel({ content: out }, record)
+      }
+
+      // background=false：一次性子任务（spawn / fork + 结构化结果，原逻辑）
       // 子任务：内存临时会话（不入库），完整独立 loop，静默执行（no-op emit）
       const subSession: Session = {
         id: newId('sub'),
@@ -336,18 +411,138 @@ const loadSkillDef: ToolDef = {
   },
 }
 
+// ---------- 后台子代理控制工具族（continuable 通信） ----------
+
+const sendMessageDef: ToolDef = {
+  id: 'send_message',
+  name: 'send_message',
+  description:
+    '与后台子代理双向通信：给子代理发消息（to: sub_xxx），或向父会话留言（to: parent，仅子代理可用）。' +
+    '给空闲子代理发消息会启动它新一轮处理；给运行中的发消息则排队（当前轮结束后自动处理）。' +
+    '留言给父：父的下一轮会自动看到你的留言与结果。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      to: { type: 'string', description: '目标：后台子代理 id（sub_xxx）或 parent（向父留言）' },
+      content: { type: 'string', description: '消息内容（自包含：要对方做什么/要什么信息）' },
+    },
+    required: ['to', 'content'],
+  },
+  createExecute: (rt) => async (args) => {
+    const to = String((args as { to?: unknown }).to ?? '').trim()
+    const content = String((args as { content?: unknown }).content ?? '').trim()
+    const record = startRecord(rt, 'send_message', args)
+    try {
+      if (!to || !content) {
+        endRecord(rt, record, 'error', 'ERROR: to and content required')
+        return { content: 'Error: to（目标 id）与 content（消息内容）都必填', isError: true }
+      }
+      // 子 → 父：当前会话是一个后台子代理的会话（session.id = sub_xxx）
+      if (to === 'parent') {
+        const self = findSubagentBySessionId(rt.session.id)
+        if (!self) {
+          endRecord(rt, record, 'error', 'ERROR: 只有后台子代理能留言给父')
+          return { content: 'Error: 只有后台子代理（子代理会话里）能用 to=parent 留言给父', isError: true }
+        }
+        appendNotice(self.id, `[子代理 ${self.id} 留言] ${content}`)
+        endRecord(rt, record, 'success', '已留言给父会话')
+        return { content: '已留言给父会话（父的下一轮会看到）' }
+      }
+      // 父 → 子：投递到 inbox；空闲则启动新轮，运行中则排队
+      const rec = getSubagent(to)
+      if (!rec) {
+        endRecord(rt, record, 'error', `ERROR: 未知子代理 ${to}`)
+        return { content: `Error: 找不到子代理 ${to}（可用 list_agents 查看当前子代理）`, isError: true }
+      }
+      rec.inbox.push({ content, at: Date.now() })
+      saveSubagent(rec)
+      if (rec.status === 'idle') {
+        void pumpSubagent(rt, rec.id)
+        endRecord(rt, record, 'success', `已投递给子代理 ${to}（已启动新轮）`)
+        return { content: `已投递给子代理 ${to}，它已启动新一轮处理` }
+      }
+      endRecord(rt, record, 'success', `已投递给子代理 ${to}（运行中，排队）`)
+      return { content: `已投递给子代理 ${to}（它正在运行，消息已排队，当前轮结束后处理）` }
+    } catch (err) {
+      endRecord(rt, record, 'error', `ERROR: ${(err as Error).message}`)
+      return { content: `Error: 消息投递失败（${(err as Error).message}）`, isError: true }
+    }
+  },
+}
+
+const listAgentsDef: ToolDef = {
+  id: 'list_agents',
+  name: 'list_agents',
+  description:
+    '列出当前会话派生的全部后台子代理（durable id、运行状态、任务、待处理消息数），用于了解还有谁在后台干活。',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+  createExecute: (rt) => async () => {
+    const record = startRecord(rt, 'list_agents', {})
+    const subs = listSubagents(rt.session.id)
+    if (subs.length === 0) {
+      endRecord(rt, record, 'success', '无后台子代理')
+      return { content: '当前会话没有派生的后台子代理。' }
+    }
+    const lines = subs.map((s) => {
+      const state = s.status === 'running' ? '运行中' : '空闲'
+      const inboxNote = s.inbox.length ? `，待处理消息 ${s.inbox.length} 条` : ''
+      return `- ${s.id}（${state}${inboxNote}）任务：${s.task.slice(0, 80)}`
+    })
+    const out = `当前会话派生的后台子代理（${subs.length} 个）：\n${lines.join('\n')}`
+    endRecord(rt, record, 'success', out)
+    return { content: out }
+  },
+}
+
+const interruptAgentDef: ToolDef = {
+  id: 'interrupt_agent',
+  name: 'interrupt_agent',
+  description:
+    '中断某个后台子代理的当前轮（stop 它的运行），但保留其注册表、消息历史与队列——之后还能 send_message 继续。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: '要中断的后台子代理 id（sub_xxx）' },
+    },
+    required: ['id'],
+  },
+  createExecute: (rt) => async (args) => {
+    const id = String((args as { id?: unknown }).id ?? '').trim()
+    const record = startRecord(rt, 'interrupt_agent', args)
+    if (!id) {
+      endRecord(rt, record, 'error', 'ERROR: id required')
+      return { content: 'Error: id 参数必填（子代理 id）', isError: true }
+    }
+    if (!interruptSubagent(id)) {
+      endRecord(rt, record, 'error', `ERROR: 子代理 ${id} 不在运行`)
+      return { content: `Error: 子代理 ${id} 当前不在运行（可能已空闲或不存在），无需中断`, isError: true }
+    }
+    endRecord(rt, record, 'success', `已请求中断 ${id}`)
+    return { content: `已请求中断子代理 ${id}（当前轮停止，注册表与消息保留，之后可 send_message 继续）` }
+  },
+}
+
 // 全部内置工具定义（Agent 配置页"内置工具"勾选的就是这些 id；未配置/空数组 = 全部启用）
-export const builtinToolDefs: ToolDef[] = [runCommandDef, globDef, rememberDef, subagentDef, webSearchDef, loadSkillDef]
+export const builtinToolDefs: ToolDef[] = [runCommandDef, globDef, rememberDef, subagentDef, webSearchDef, loadSkillDef, sendMessageDef, listAgentsDef, interruptAgentDef]
 // 是否应为该 agent 装配某内置工具（语义与 builtinTools.shouldRegisterBuiltin 一致，re-export 统一入口）
 export { shouldRegisterBuiltin }
 
 // ---------- 装配：把"内置 + MCP"统一注册成 AI SDK 工具对象 ----------
 
 // 内置工具装配：按 Agent 勾选过滤 + 条件装配，生成 AI SDK tool
+// 父子通信控制工具（始终装配，不参与勾选过滤）：
+// agent 是否需要它们取决于"是否派生了后台子代理"（运行期动态），静态勾选表达不了；
+// 且子代理随时可能留言给父（send_message to=parent），父没有它就无法应答。
+const CONTROL_TOOLS = new Set(['send_message', 'list_agents', 'interrupt_agent'])
+
 function registerBuiltin(agent: Agent, rt: ToolRuntime, tools: Record<string, unknown>) {
   for (const def of builtinToolDefs) {
     if (def.when && !def.when(agent)) continue
-    if (!shouldRegisterBuiltin(agent.builtinTools, def.id)) continue
+    if (!CONTROL_TOOLS.has(def.id) && !shouldRegisterBuiltin(agent.builtinTools, def.id)) continue
     tools[def.name] = tool({
       description: def.description,
       inputSchema: jsonSchema<Record<string, unknown>>(def.inputSchema as JSONSchema7),

@@ -150,6 +150,10 @@ const tools = assembleTools(agent, { session, agent, depth, emit, segments, ... 
   没勾技能就没有"加载技能"的意义（也没目录），别给模型一个用不上的工具
 - `subagent` 依赖递归（`runTurn`），通过 `runtime.runSubagent` 注入，避免注册表与主循环循环依赖；
   **fork 模式**（子继承父会话历史快照，默认 spawn 从零开始）与**结构化结果回传**（状态 / 步骤数 / Token / 完整部分产出）
+- 后台子代理（continuable）：`subagent` 加 `background: true` 即创建**后台常驻**子代理——立即返回 durable id，
+  子代理后台异步泵轮（首轮 = task，之后 = `send_message` 队列）；配套控制工具族 `send_message`（父↔子双向）/
+  `list_agents`（列出活跃子+谱系）/ `interrupt_agent`（中断当前轮但保留注册表），它们**始终装配**（基础设施，不参与勾选过滤）；
+  子代理结算通知（settlement notice）在父下一轮组装 history 时自动注入——父无需轮询
 - `web_search` 的实现（DeepSeek 原生 + curl 兜底链）仍留在 `server/builtinTools.ts`，
   注册表只负责把它接进 record/事件/修剪管道
 
