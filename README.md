@@ -7,6 +7,20 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg)](https://www.typescriptlang.org)
 [![GitHub stars](https://img.shields.io/github/stars/Syotick/nova-agent?style=social)](https://github.com/Syotick/nova-agent)
 
+<div align="center">
+
+## 🚀 求职中 · AI Agent 应用开发工程师
+
+**矿大（211）· 计算机科学与技术 · 2026 届本科** ｜ 南京 / 杭州 / 上海 / 北京 / 深圳 ｜ 随时到岗
+
+📄 [下载简历（PDF）](./docs/resume/XiongDezhi_AI-Agent-Developer.pdf) ｜ ✉️ [2825902006@qq.com](mailto:2825902006@qq.com) ｜ 🔗 [github.com/Syotick](https://github.com/Syotick)
+
+*这个项目就是我最好的简历——从 Agent Loop 到 MCP、技能系统、记忆、上下文压缩、CI/Release，9,400 行 TypeScript 全栈 Agent 框架，架构与测试由我把关。*
+
+</div>
+
+---
+
 **Nova Agent** 是一个好学、开箱即用的开源 AI Agent。Agent 循环、MCP 工具、Agent Skills、记忆、任务自动化——整个设计目标是一个晚上读完、能跑起来、然后动手改。面向在校大学生和转行做 Agent 开发的开发者。
 
 > Agent 循环、MCP 工具、技能系统、多轮对话、轨迹展示、多 Agent 管理、可视化配置、安全隔离，都在一个小代码库里。

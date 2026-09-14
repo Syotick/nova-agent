@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>熊德志 - AI Agent 应用开发工程师</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #222; font-size: 9.3pt; line-height: 1.4;
+    width: 210mm; padding: 7mm 11mm;
+  }
+  h1 { font-size: 17.5pt; letter-spacing: 1px; }
+  .headline { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2.5px solid #1a3c6e; padding-bottom: 4px; }
+  .headline .sub { font-size: 10.5pt; color: #1a3c6e; font-weight: 600; }
+  .contact { text-align: right; font-size: 8.6pt; color: #444; line-height: 1.5; }
+  .contact b { color: #222; }
+  h2 { font-size: 10.8pt; color: #1a3c6e; margin: 6px 0 3px; border-left: 4px solid #1a3c6e; padding-left: 6px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .row .r { color: #666; font-size: 8.7pt; white-space: nowrap; }
+  .item { margin-bottom: 3px; }
+  .item .title { font-weight: 700; font-size: 9.9pt; }
+  .item .meta { font-size: 8.5pt; color: #555; margin: 1px 0 2px; }
+  ul { padding-left: 13px; }
+  li { margin-bottom: 1px; text-align: justify; }
+  li b { color: #1a3c6e; }
+  .tag { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="headline">
+  <div>
+    <h1>熊德志</h1>
+    <div class="sub">AI Agent 应用开发工程师</div>
+  </div>
+  <div class="contact">
+    <b>出生年月</b>：2004.10 ｜ <b>到岗</b>：随时<br>
+    <b>电话</b>：151-0729-1272 ｜ <b>邮箱</b>：2825902006@qq.com<br>
+    <b>GitHub</b>：github.com/Syotick<br>
+    <b>意向城市</b>：南京 / 杭州 / 上海 / 北京 / 深圳均可
+  </div>
+</div>
+
+<h2>教育背景</h2>
+<div class="item">
+  <div class="row"><span class="title">中国矿业大学（211）· 计算机科学与技术 · 本科</span><span class="r">2022.09 – 2026.06</span></div>
+  <div class="meta">校一等奖学金 ｜ 挑战杯三等奖 ｜ 数学建模三等奖 ｜ 英语六级（CET-6）</div>
+</div>
+
+<h2>专业技能</h2>
+<ul>
+  <li><span class="tag">AI Agent：</span>Agent Loop 多步工具调用循环、Function Calling、MCP 客户端与多服务器网关、<b>Agent Skills 技能系统</b>（SKILL.md 声明式技能、技能目录扫描发现、渐进式披露按需加载、resources 资源目录）、<b>工具注册与运行时动态装配</b>（内置与 MCP 工具统一管道、连接时拉取清单动态注册、命名冲突保护、JSON Schema 参数校验、read / write / destructive 三级权限分级）、LangGraph 多 Agent 编排与子 Agent 派生、分层记忆与反思纠错</li>
+  <li><span class="tag">RAG：</span>Embedding 向量检索、向量与 BM25 混合检索、RRF 融合、Rerank 重排、溯源引用、RAGAS 评测</li>
+  <li><span class="tag">LLM 工程：</span>Vercel AI SDK、多供应商模型网关、SSE 流式传输、Prompt 与 Context Engineering、全 mock 测试链路</li>
+  <li><span class="tag">后端与前端：</span>Python 与 FastAPI、Node.js 与 TypeScript、Express、SQLite；React 19、Zustand、Vite、Tailwind CSS</li>
+  <li><span class="tag">工程化：</span>Git、pytest、vitest、GitHub Actions CI、Prometheus 指标、OpenTelemetry 可观测</li>
+</ul>
+
+<h2>项目经历</h2>
+
+<div class="item">
+  <div class="row"><span class="title">Nova Agent — 开源轻量级 AI Agent 框架</span><span class="r">2026.06 – 至今</span></div>
+  <div class="meta">github.com/Syotick/nova-agent ｜ TypeScript · React 19 · Vercel AI SDK · MCP</div>
+  <ul>
+    <li><b>主导设计与实现 9,400 行 TypeScript 全栈系统</b>（AI 结对开发，架构决策、代码审查与测试由本人把关），覆盖前端 React、后端 Express 与 SQLite 持久化，12 个测试文件、CI 自动化与自动 Release</li>
+    <li><b>Agent 循环：</b>实现 streamText 多步工具调用循环，步数上限可配，SSE 流式输出；轨迹 Inspector 实时展示每步工具调用的输入、输出、耗时与 token</li>
+    <li><b>工具层：</b>内置 9 个工具与 MCP 工具走同一装配管道，按 Agent 配置与条件过滤后以 JSON Schema 注入模型；MCP 服务器连接时拉取工具清单并在运行时动态注册，内置与 MCP 撞名时内置优先；含健康检查与指数退避重连</li>
+    <li><b>Agent Skills 技能系统：</b>扫描技能目录自动发现 SKILL.md 并解析 frontmatter（名称、描述、使用时机）；系统提示只注入技能目录块，技能正文由 load_skill 工具按需加载，实现渐进式披露、避免技能全文挤占上下文预算；配套可视化技能管理（新建 / 编辑 / 删除 / 导入导出）与单元测试</li>
+    <li><b>上下文工程与安全：</b>token 感知自动压缩，窗口占用达 90% 阈值时由 LLM 总结早期历史并按双预算保留近期消息；超 8K 字符工具输出自动修剪；工作区目录隔离、密钥项目外存储、防 XSS；附 8 篇教学文档</li>
+  </ul>
+</div>
+
+<div class="item">
+  <div class="row"><span class="title">Flare Agent — 本地优先 Agent 执行平台</span><span class="r">2026.06 – 至今</span></div>
+  <div class="meta">github.com/Syotick/flare-agent ｜ Python 3.12 · FastAPI · LangGraph ｜ 265 个 pytest 全通过</div>
+  <ul>
+    <li><b>任务编排：</b>基于 LangGraph 驱动任务执行，SSE 实时回推轨迹；read、write、edit、bash 等六类工作区工具按任务目录动态注入，工作区边界校验覆盖越界拒绝、写前读保护与 edit 版本校验</li>
+    <li><b>工具网关与权限分级：</b>自研工具注册表按 read、write、destructive 三级分级并支持只读视图，参数按 JSON Schema 校验、重名注册直接报错；MCP 网关接入多服务器，采用服务器级与工具级双白名单、认证头与审计日志，工具以 mcp__服务器__工具 命名空间幂等注册</li>
+    <li><b>技能系统：</b>文件系统技能库，frontmatter 严格校验、非法配置启动即报错；支持 resources 资源目录递归加载、required_tools 依赖声明与 install / uninstall 生命周期管理</li>
+    <li><b>RAG 与记忆：</b>向量与 BM25 混合检索、RRF 融合、Rerank 重排、带溯源引用，RAGAS 质量评测；长期事实、向量记忆与会话上下文的分层记忆自动召回注入</li>
+    <li><b>平台能力：</b>多供应商模型网关，兼容 mock、OpenAI 兼容接口与 Anthropic 原生；子 Agent 派生、瞬态重试与指数退避、Prometheus 指标与 OpenTelemetry 可观测</li>
+  </ul>
+</div>
+
+<h2>工作经历</h2>
+<div class="item">
+  <div class="row"><span class="title">江苏智融能源科技有限公司 · AI 应用 / 后端开发</span><span class="r">2026.07 – 2026.09</span></div>
+  <ul>
+    <li>独立完成配电网网架报告生成系统，基于 RAG 检索设计规范文档自动生成网架分析报告；独立完成 NL2SQL 网架数据查询，自然语言直查电网网架数据。两项均形成交付包并通过客户演示验收</li>
+  </ul>
+</div>
+
+<h2>自我评价</h2>
+<ul>
+  <li>Agent 方向自驱者：毕业 3 个月内以 AI 结对方式主导完成 2 个开源框架（合计约 26,000 行代码、265 个测试、12 个测试文件），架构设计、代码审查与测试把关均本人负责；框架层到平台层到企业级落地全链路，源码开源可审查、可现场演示</li>
+</ul>
+
+</body>
+</html>
