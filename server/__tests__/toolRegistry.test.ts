@@ -187,3 +187,96 @@ describe('toolRegistry load_skill（按需加载技能全文）', () => {
     expect(res.isError).toBe(true)
   })
 })
+
+describe('toolRegistry subagent：fork / spawn + 结构化结果', () => {
+  function tool(rt: ToolRuntime) {
+    const tools = assembleTools(rt.agent, rt, [])
+    return tools['subagent'] as { execute: (args: Record<string, unknown>) => Promise<{ content: string; isError?: boolean }> }
+  }
+
+  const parentMsg: Message = { id: 'p1', role: 'user', content: '用户：把刚才的方案落地', createdAt: 1 }
+  const parentRt = () => {
+    const agent = makeAgent(undefined)
+    const rt = makeRt(agent)
+    rt.session = { id: 's1', agentId: agent.id, title: '', messages: [parentMsg], createdAt: 0, updatedAt: 0 }
+    return rt
+  }
+
+  // 模拟子任务：push 一条带工具步骤的 assistant 产出，返回带 tokens 的结果
+  const subProducer = (rt: ToolRuntime, subContent: string) => {
+    const stepCall = { id: 't1', name: 'glob', input: {}, output: 'ok', status: 'success', startedAt: 0, durationMs: 1 }
+    rt.runSubagent = async (sub) => {
+      sub.messages.push({
+        id: 'a1', role: 'assistant', content: subContent, createdAt: 2,
+        segments: [{ kind: 'tool', call: stepCall }],
+        tokens: { input: 10, output: 20 },
+      } as Message)
+      return { id: 'a1', role: 'assistant', content: subContent, tokens: { input: 10, output: 20 }, createdAt: 2 } as Message
+    }
+  }
+
+  it('spawn（默认）：子会话从零开始，不带父历史', async () => {
+    const rt = parentRt()
+    let seen: Session | undefined
+    rt.runSubagent = async (sub) => { seen = sub; return { id: 'a', role: 'assistant', content: 'ok', createdAt: 2 } as Message }
+    await tool(rt).execute({ task: '独立查证' })
+    expect(seen?.messages.length).toBe(0)
+  })
+
+  it('fork=true：子会话继承父历史（一次性快照，深拷贝）', async () => {
+    const rt = parentRt()
+    let seen: Session | undefined
+    rt.runSubagent = async (sub) => { seen = sub; return { id: 'a', role: 'assistant', content: 'ok', createdAt: 2 } as Message }
+    await tool(rt).execute({ task: '继续落地', fork: true })
+    expect(seen?.messages.length).toBe(1)
+    expect(seen?.messages[0].content).toBe('用户：把刚才的方案落地')
+    // 深拷贝：改子 seed 不改父
+    seen!.messages[0].content = '被改'
+    expect(parentMsg.content).toBe('用户：把刚才的方案落地')
+  })
+
+  it('成功：返回结构化结果（含步骤数 / Token / 子结论）', async () => {
+    const rt = parentRt()
+    subProducer(rt, '子任务结论：已完成')
+    const res = await tool(rt).execute({ task: '写个总结' })
+    expect(res.isError).toBeFalsy()
+    expect(res.content).toContain('[子任务结果]')
+    expect(res.content).toContain('步骤数 1')
+    expect(res.content).toContain('Token 输入 10 / 输出 20')
+    expect(res.content).toContain('子任务结论：已完成')
+    expect(rt.executedToolCalls[0].status).toBe('success')
+  })
+
+  it('部分完成：无最终结论时返回状态+完整部分产出', async () => {
+    const rt = parentRt()
+    subProducer(rt, '中途进展：已经改了 2 个文件')
+    rt.runSubagent = async (sub) => {
+      sub.messages.push({ id: 'a1', role: 'assistant', content: '中途进展：已经改了 2 个文件', createdAt: 2 } as Message)
+      return { id: 'a1', role: 'assistant', content: '', createdAt: 2 } as Message
+    }
+    const res = await tool(rt).execute({ task: '大任务' })
+    expect(res.isError).toBe(true)
+    expect(res.content).toContain('部分完成')
+    expect(res.content).toContain('中途进展：已经改了 2 个文件')
+  })
+
+  it('失败：返回失败状态+原因+部分产出', async () => {
+    const rt = parentRt()
+    rt.runSubagent = async (sub) => {
+      sub.messages.push({ id: 'a1', role: 'assistant', content: '查到一半', createdAt: 2 } as Message)
+      throw new Error('模型 401')
+    }
+    const res = await tool(rt).execute({ task: '调研' })
+    expect(res.isError).toBe(true)
+    expect(res.content).toContain('失败')
+    expect(res.content).toContain('模型 401')
+    expect(res.content).toContain('查到一半')
+  })
+
+  it('缺 task：报错', async () => {
+    const rt = parentRt()
+    const res = await tool(rt).execute({})
+    expect(res.isError).toBe(true)
+    expect(res.content).toContain('task 参数必填')
+  })
+})

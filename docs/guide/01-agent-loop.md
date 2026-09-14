@@ -148,7 +148,8 @@ const tools = assembleTools(agent, { session, agent, depth, emit, segments, ... 
   不再直接碰主循环内部状态——想加一个内置工具 = 往 `builtinToolDefs` 加一个定义，主循环零改动
 - **条件装配** `when?`：`load_skill` 只在 agent 勾选过技能（`skillIds` 非空）时注册——
   没勾技能就没有"加载技能"的意义（也没目录），别给模型一个用不上的工具
-- `subagent` 依赖递归（`runTurn`），通过 `runtime.runSubagent` 注入，避免注册表与主循环循环依赖
+- `subagent` 依赖递归（`runTurn`），通过 `runtime.runSubagent` 注入，避免注册表与主循环循环依赖；
+  **fork 模式**（子继承父会话历史快照，默认 spawn 从零开始）与**结构化结果回传**（状态 / 步骤数 / Token / 完整部分产出）
 - `web_search` 的实现（DeepSeek 原生 + curl 兜底链）仍留在 `server/builtinTools.ts`，
   注册表只负责把它接进 record/事件/修剪管道
 

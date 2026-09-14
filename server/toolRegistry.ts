@@ -177,20 +177,24 @@ const subagentDef: ToolDef = {
   id: 'subagent',
   name: 'subagent',
   description:
-    '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），完成后返回其最终结论。' +
+    '派生一个子 Agent 独立执行子任务（并行调研/独立验证/耗时任务），返回结构化结果（状态/步骤数/Token/结论/部分产出）。' +
     '适合：多个方向并行探索、独立审查、把大任务拆成小任务。task 必须是自包含的描述（目标+约束+交付格式）。' +
-    '失败处理：子任务返回 ERROR 时——有明确原因就修正 task 后重试最多 1 次；有部分产出就基于部分产出继续；不可恢复就停止并告知用户，禁止编造子任务结果。',
+    'fork=false（默认）：子任务从零开始，task 必须自包含；fork=true：子任务继承父会话历史（已完成对话+当前用户消息），' +
+    '适合"基于刚才的讨论继续"——注意 fork 是创建时的一次性快照，父之后的进展不会再带给子。' +
+    '失败处理：子任务返回状态=失败/部分完成时——有明确原因就修正 task 后重试最多 1 次；有部分产出就基于部分产出继续；不可恢复就停止并告知用户，禁止编造子任务结果。',
   inputSchema: {
     type: 'object',
     properties: {
       task: { type: 'string', description: '子任务描述（自包含：目标 + 约束 + 交付格式）' },
       model: { type: 'string', description: '可选：子 Agent 模型（provider/model），默认继承当前 Agent' },
+      fork: { type: 'boolean', description: '可选：true 时子任务继承父会话历史（默认 false 从零开始）' },
     },
     required: ['task'],
   },
   createExecute: (rt) => async (args) => {
     const task = String((args as { task?: unknown }).task ?? '').trim()
     const modelOverride = String((args as { model?: unknown }).model ?? '').trim() || undefined
+    const fork = Boolean((args as { fork?: unknown }).fork)
     const record = startRecord(rt, 'subagent', args)
     try {
       if (!task) {
@@ -208,7 +212,9 @@ const subagentDef: ToolDef = {
         id: newId('sub'),
         agentId: rt.agent.id,
         title: `[子任务] ${task.slice(0, 30)}`,
-        messages: [],
+        // fork：继承父会话已完成历史 + 当前用户消息（一次性快照；深拷贝防子 compact 改写污染父）
+        // spawn（默认）：从零开始，task 必须自包含
+        messages: fork ? structuredClone(rt.session.messages) : [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
@@ -220,25 +226,37 @@ const subagentDef: ToolDef = {
       const abortChild = () => rt.abortRun(subSession.id)
       subs.add(abortChild)
 
-      const partialOf = () => {
-        const last = [...subSession.messages].reverse().find((m) => m.role === 'assistant')
-        return last?.content?.trim() ? last.content.slice(0, 500) : ''
+      // 子会话统计（结构化结果用）：工具步骤数 + 完整部分产出
+      const subStats = () => {
+        let steps = 0
+        const partials: string[] = []
+        for (const m of subSession.messages) {
+          if (m.segments) for (const seg of m.segments) if (seg.kind === 'tool') steps++
+          else if (m.toolCalls) steps += m.toolCalls.length
+          if (m.role === 'assistant' && m.content?.trim()) partials.push(m.content.trim())
+        }
+        return { steps, partial: partials.join('\n\n').slice(0, 2000) }
       }
+
       try {
         const msg = await rt.runSubagent(subSession, subAgent, task, () => {}, undefined, undefined, rt.depth + 1)
+        const { steps } = subStats()
         if (msg.content) {
-          endRecord(rt, record, 'success', msg.content)
-          return rt.toolResultForModel({ content: msg.content }, record)
+          // 结构化结果：状态隐含在 content 是否存在；显式给出步骤数 + Token，父 Agent 可据此判断"值不值"
+          const stats = `步骤数 ${steps}${msg.tokens ? `，Token 输入 ${msg.tokens.input} / 输出 ${msg.tokens.output}` : ''}`
+          const out = `[子任务结果]（${stats}）\n${msg.content}`
+          endRecord(rt, record, 'success', out)
+          return rt.toolResultForModel({ content: out }, record)
         }
-        // 子任务未产出内容（中断等）：附上部分产出，让主 Agent 判断
-        const partial = partialOf()
-        const out = `Error: 子任务未产出内容${partial ? `。部分产出：${partial}` : ''}`
+        // 子任务未产出最终结论（中断等）：标记部分完成 + 完整部分产出，让父 Agent 基于已有进展继续
+        const { partial } = subStats()
+        const out = `[子任务结果]（状态：部分完成，步骤数 ${steps}，无最终结论）\n部分产出：\n${partial || '（无）'}`
         endRecord(rt, record, 'error', out)
         return { content: out, isError: true }
       } catch (err) {
-        // 子任务执行失败（模型 401/网络等）：返回原因 + 部分产出（诊断上下文，避免主 Agent 盲重试/编造）
-        const partial = partialOf()
-        const out = `Error: 子任务失败（${(err as Error).message}）${partial ? `。部分产出：${partial}` : ''}`
+        // 子任务执行失败（模型 401/网络等）：返回原因 + 完整部分产出（诊断上下文，避免主 Agent 盲重试/编造）
+        const { partial } = subStats()
+        const out = `[子任务结果]（状态：失败：${(err as Error).message}）\n部分产出：\n${partial || '（无）'}`
         endRecord(rt, record, 'error', out)
         return { content: out, isError: true }
       } finally {
