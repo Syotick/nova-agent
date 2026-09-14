@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/Syotick/nova-agent/compare/nova-agent-v0.5.0...nova-agent-v0.6.0) (2026-09-14)
+
+
+### ✨ 新功能
+
+* **subagent:** 后台子代理（continuable）——父子持续双向通信闭环 ([2410f90](https://github.com/Syotick/nova-agent/commit/2410f90b6e6866fdc6848053ba004269424f8e4d))
+* **subagent:** 父子 agent 通信升级——fork 继承式 + 结构化结果回传 ([280ee04](https://github.com/Syotick/nova-agent/commit/280ee049655b24dda911ec0765986708825adf54))
+
+
+### 📄 文档
+
+* **readme:** 醒目位置挂求职横幅 + 简历（GitHub 自荐） ([3bdf44c](https://github.com/Syotick/nova-agent/commit/3bdf44cdf7eab528b09951695e159eddf9f4baa0))
+
 ## [0.5.0](https://github.com/Syotick/nova-agent/compare/nova-agent-v0.4.0...nova-agent-v0.5.0) (2026-09-12)
 
 
